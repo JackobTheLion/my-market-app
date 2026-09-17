@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+    <changeSet id="002-create-indexes" author="yakovlev">
+        <createIndex indexName="items_title_id_idx" tableName="items" schemaName="${appSchema}">
+            <column name="title"/>
+            <column name="id"/>
+        </createIndex>
+        <createIndex indexName="items_price_id_idx" tableName="items" schemaName="${appSchema}">
+            <column name="price"/>
+            <column name="id"/>
+        </createIndex>
+        <createIndex indexName="orders_created_at_idx" tableName="orders" schemaName="${appSchema}">
+            <column name="created_at" descending="true"/>
+            <column name="id" descending="true"/>
+        </createIndex>
+        <createIndex indexName="order_items_order_id_idx" tableName="order_items" schemaName="${appSchema}">
+            <column name="order_id"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex indexName="order_items_order_id_idx" tableName="order_items" schemaName="${appSchema}"/>
+            <dropIndex indexName="orders_created_at_idx" tableName="orders" schemaName="${appSchema}"/>
+            <dropIndex indexName="items_price_id_idx" tableName="items" schemaName="${appSchema}"/>
+            <dropIndex indexName="items_title_id_idx" tableName="items" schemaName="${appSchema}"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

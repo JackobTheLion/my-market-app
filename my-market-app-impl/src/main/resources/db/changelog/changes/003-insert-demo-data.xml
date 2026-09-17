@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+    <changeSet id="003-insert-demo-data" author="yakovlev">
+        <preConditions onFail="CONTINUE" onError="HALT">
+            <changeLogPropertyDefined property="insertDemoData" value="true"/>
+        </preConditions>
+
+        <sql><![CDATA[
+
+WITH new_items AS (
+    INSERT INTO "${appSchema}".items (title, description, image_path, price)
+    VALUES
+        ('Кофе в зёрнах', 'Арабика средней обжарки, 1 кг.', 'demo/coffee.jpg', 1490.00),
+        ('Чай зелёный', 'Листовой зелёный чай с жасмином, 100 г.', 'demo/tea.jpg', 390.00),
+        ('Кружка керамическая', 'Белая керамическая кружка объёмом 350 мл.', 'demo/mug.jpg', 590.00),
+        ('Термос', 'Термос из нержавеющей стали объёмом 500 мл.', 'demo/thermos.jpg', 1290.00),
+        ('Блокнот', 'Блокнот формата A5 в точку, 96 листов.', 'demo/notebook.jpg', 350.00),
+        ('Ручка гелевая', 'Гелевая ручка с чёрными чернилами, 0,5 мм.', 'demo/pen.jpg', 90.00),
+        ('Рюкзак городской', 'Рюкзак на 20 литров с отделением для ноутбука.', null, 3490.00),
+        ('Лампа настольная', 'Светодиодная лампа с тремя режимами яркости.', 'demo/lamp.jpg', 2190.00),
+        ('Мышь беспроводная', 'Компактная беспроводная мышь с USB-приёмником.', 'demo/mouse.jpg', 1190.00),
+        ('Клавиатура', 'Проводная клавиатура с русской и английской раскладками.', 'demo/keyboard.jpg', 2490.00),
+        ('Коврик для мыши', 'Тканевый коврик с нескользящим основанием, 30 × 25 см.', 'demo/mouse-pad.jpg', 450.00),
+        ('Кабель USB-C', 'Кабель USB-C для зарядки и передачи данных, 1 метр.', 'demo/usb-c.jpg', 499.90)
+    RETURNING id, title, price
+), first_order AS (
+    INSERT INTO "${appSchema}".orders (created_at)
+    VALUES (CURRENT_TIMESTAMP - INTERVAL '7 days')
+    RETURNING id
+), second_order AS (
+    INSERT INTO "${appSchema}".orders (created_at)
+    VALUES (CURRENT_TIMESTAMP - INTERVAL '3 days')
+    RETURNING id
+), third_order AS (
+    INSERT INTO "${appSchema}".orders (created_at)
+    VALUES (CURRENT_TIMESTAMP - INTERVAL '1 day')
+    RETURNING id
+), new_orders AS (
+    SELECT 1 AS demo_number, id FROM first_order
+    UNION ALL
+    SELECT 2 AS demo_number, id FROM second_order
+    UNION ALL
+    SELECT 3 AS demo_number, id FROM third_order
+), positions (demo_number, item_title, quantity) AS (
+    VALUES
+        (1, 'Кофе в зёрнах', 1),
+        (1, 'Кружка керамическая', 2),
+        (1, 'Чай зелёный', 1),
+        (2, 'Блокнот', 3),
+        (2, 'Ручка гелевая', 5),
+        (3, 'Мышь беспроводная', 1),
+        (3, 'Коврик для мыши', 1),
+        (3, 'Кабель USB-C', 2)
+)
+INSERT INTO "${appSchema}".order_items (order_id, item_id, title, price, quantity)
+SELECT o.id, i.id, i.title, i.price, p.quantity
+FROM positions p
+JOIN new_orders o ON o.demo_number = p.demo_number
+JOIN new_items i ON i.title = p.item_title;
+
+        ]]></sql>
+    </changeSet>
+</databaseChangeLog>
