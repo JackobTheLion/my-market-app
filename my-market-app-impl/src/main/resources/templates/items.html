@@ -38,8 +38,6 @@
                     </div>
                     <div class="form-floating w-25">
                         <select class="form-select" id="pageSize" name="pageSize" onchange="document.getElementById('main').submit()" form="main">
-                            <option value="2" th:selected="${paging.pageSize()==2}">2</option>
-                            <option value="5" th:selected="${paging.pageSize()==5}">5</option>
                             <option value="10" th:selected="${paging.pageSize()==10}">10</option>
                             <option value="20" th:selected="${paging.pageSize()==20}">20</option>
                             <option value="50" th:selected="${paging.pageSize()==50}">50</option>

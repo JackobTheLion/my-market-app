@@ -57,10 +57,24 @@
             <column name="price" type="NUMERIC(19,2)">
                 <constraints nullable="false"/>
             </column>
+            <column name="image_path" type="VARCHAR(1024)">
+                <constraints nullable="true"/>
+            </column>
             <column name="quantity" type="INTEGER">
                 <constraints nullable="false"/>
             </column>
         </createTable>
+
+        <sql>
+            ALTER TABLE "${appSchema}".items
+                ADD CONSTRAINT items_price_positive CHECK (price &gt; 0);
+            ALTER TABLE "${appSchema}".cart_items
+                ADD CONSTRAINT cart_items_quantity_positive CHECK (quantity &gt; 0);
+            ALTER TABLE "${appSchema}".order_items
+                ADD CONSTRAINT order_items_price_positive CHECK (price &gt; 0);
+            ALTER TABLE "${appSchema}".order_items
+                ADD CONSTRAINT order_items_quantity_positive CHECK (quantity &gt; 0);
+        </sql>
 
         <addForeignKeyConstraint constraintName="cart_items_item_fk"
                                  baseTableSchemaName="${appSchema}" baseTableName="cart_items" baseColumnNames="item_id"

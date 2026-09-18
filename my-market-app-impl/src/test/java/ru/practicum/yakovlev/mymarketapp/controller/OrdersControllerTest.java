@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderItemDto;
+import ru.practicum.yakovlev.mymarketapp.dto.OrdersPageDto;
 import ru.practicum.yakovlev.mymarketapp.exception.NotFoundException;
 import ru.practicum.yakovlev.mymarketapp.service.OrderService;
 import ru.practicum.yakovlev.mymarketapp.support.MvcTestSupport;
@@ -26,14 +27,28 @@ class OrdersControllerTest extends MvcTestSupport {
 
     @Test
     void rendersHistory() throws Exception {
-        List<OrderDto> orders = List.of(new OrderDto(1, List.of(new OrderItemDto(2, "Coffee", new BigDecimal("12.50"), 2)), new BigDecimal("25.00")));
+        List<OrderDto> orders = List.of(new OrderDto(1, List.of(new OrderItemDto(2, "Coffee", new BigDecimal("12.50"), "images/demo/coffee.jpg", 2)), new BigDecimal("25.00")));
 
-        when(orderService.getOrders()).thenReturn(orders);
+        when(orderService.getOrders()).thenReturn(new OrdersPageDto(orders, new BigDecimal("25.00")));
 
         mvc.perform(get("/orders"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("orders"))
-                .andExpect(model().attribute("orders", orders));
+                .andExpect(model().attribute("orders", orders))
+                .andExpect(model().attribute("total", new BigDecimal("25.00")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Общая сумма всех заказов: 25.00 руб.")));
+    }
+
+    @Test
+    void rendersOrderItemImage() throws Exception {
+        OrderItemDto item = new OrderItemDto(2, "Coffee", new BigDecimal("12.50"), "images/demo/coffee.jpg", 2);
+        OrderDto order = new OrderDto(1, List.of(item), new BigDecimal("25.00"));
+
+        when(orderService.getOrder(1)).thenReturn(order);
+
+        mvc.perform(get("/orders/1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("src=\"/images/demo/coffee.jpg\"")));
     }
 
     @Test

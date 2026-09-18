@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
+import ru.practicum.yakovlev.mymarketapp.dto.OrdersPageDto;
 import ru.practicum.yakovlev.mymarketapp.exception.EmptyCartException;
 import ru.practicum.yakovlev.mymarketapp.exception.NotFoundException;
 import ru.practicum.yakovlev.mymarketapp.mapper.OrderMapper;
@@ -13,6 +14,7 @@ import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.OrderRepository;
 import ru.practicum.yakovlev.mymarketapp.service.OrderService;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -25,8 +27,12 @@ public class OrderServiceImpl implements OrderService {
     private final OrderMapper orderMapper;
 
     @Override
-    public List<OrderDto> getOrders() {
-        return orderMapper.toDtos(orderRepository.findAllByOrderByCreatedAtDescIdDesc());
+    public OrdersPageDto getOrders() {
+        List<OrderDto> orders = orderMapper.toDtos(orderRepository.findAllByOrderByCreatedAtDescIdDesc());
+        BigDecimal totalSum = orders.stream()
+                .map(OrderDto::totalSum)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new OrdersPageDto(orders, totalSum);
     }
 
     @Override

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import ru.practicum.yakovlev.mymarketapp.api.controller.OrdersControllerApi;
+import ru.practicum.yakovlev.mymarketapp.dto.OrdersPageDto;
 import ru.practicum.yakovlev.mymarketapp.service.OrderService;
 
 @Controller
@@ -14,7 +15,9 @@ public class OrdersController implements OrdersControllerApi {
 
     @Override
     public String getOrders(Model model) {
-        model.addAttribute("orders", orderService.getOrders());
+        OrdersPageDto page = orderService.getOrders();
+        model.addAttribute("orders", page.orders());
+        model.addAttribute("total", page.totalSum());
         return "orders";
     }
 

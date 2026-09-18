@@ -17,7 +17,6 @@ import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.ItemRepository;
 import ru.practicum.yakovlev.mymarketapp.service.ItemService;
 
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -26,8 +25,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ItemServiceImpl implements ItemService {
-
-    private static final int ROW_SIZE = 3;
 
     private final ItemRepository itemRepository;
     private final CartItemRepository cartItemRepository;
@@ -47,7 +44,7 @@ public class ItemServiceImpl implements ItemService {
         List<ItemDto> items = page.getContent().stream()
                 .map(item -> itemMapper.toDto(item, counts.getOrDefault(item.getId(), 0)))
                 .toList();
-        return new ItemPageDto(toRows(items),
+        return new ItemPageDto(items,
                 new PagingDto(pageSize, pageNumber, page.hasPrevious(), page.hasNext()));
     }
 
@@ -57,17 +54,5 @@ public class ItemServiceImpl implements ItemService {
                 .orElseThrow(() -> new NotFoundException("Item not found: " + id));
         int count = cartItemRepository.findById(id).map(CartItem::getQuantity).orElse(0);
         return itemMapper.toDto(item, count);
-    }
-
-    private List<List<ItemDto>> toRows(List<ItemDto> items) {
-        List<List<ItemDto>> rows = new LinkedList<>();
-        for (int offset = 0; offset < items.size(); offset += ROW_SIZE) {
-            List<ItemDto> row = new LinkedList<>(items.subList(offset, Math.min(offset + ROW_SIZE, items.size())));
-            while (row.size() < ROW_SIZE) {
-                row.add(ItemDto.defaultItem());
-            }
-            rows.add(List.copyOf(row));
-        }
-        return List.copyOf(rows);
     }
 }

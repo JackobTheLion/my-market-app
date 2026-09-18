@@ -34,6 +34,13 @@ public class CartItem {
 
     public CartItem(Item item, int quantity) {
         this.item = item;
+        setQuantity(quantity);
+    }
+
+    public void setQuantity(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero");
+        }
         this.quantity = quantity;
     }
 
@@ -42,6 +49,9 @@ public class CartItem {
     }
 
     public void decrement() {
+        if (quantity <= 1) {
+            throw new IllegalStateException("Quantity cannot be decremented below one");
+        }
         quantity--;
     }
 }

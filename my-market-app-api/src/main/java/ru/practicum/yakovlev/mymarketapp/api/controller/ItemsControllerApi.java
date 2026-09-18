@@ -1,5 +1,6 @@
 package ru.practicum.yakovlev.mymarketapp.api.controller;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.ui.Model;
@@ -20,7 +21,7 @@ public interface ItemsControllerApi {
             @RequestParam(name = "search", required = false) String search,
             @RequestParam(name = "sort", required = false, defaultValue = "NO") @NotNull ItemSort sort,
             @RequestParam(name = "pageNumber", required = false, defaultValue = "1") @Positive int pageNumber,
-            @RequestParam(name = "pageSize", required = false, defaultValue = "5") @Positive int pageSize,
+            @RequestParam(name = "pageSize", required = false, defaultValue = "10") @Positive @Max(100) int pageSize,
             Model model
     );
 
@@ -30,7 +31,7 @@ public interface ItemsControllerApi {
             @RequestParam(name = "search", required = false) String search,
             @RequestParam(name = "sort", required = false, defaultValue = "NO") @NotNull ItemSort sort,
             @RequestParam(name = "pageNumber", required = false, defaultValue = "1") @Positive int pageNumber,
-            @RequestParam(name = "pageSize", required = false, defaultValue = "5") @Positive int pageSize,
+            @RequestParam(name = "pageSize", required = false, defaultValue = "10") @Positive @Max(100) int pageSize,
             @RequestParam("action") @NotNull CartAction action,
             RedirectAttributes redirectAttributes
     );

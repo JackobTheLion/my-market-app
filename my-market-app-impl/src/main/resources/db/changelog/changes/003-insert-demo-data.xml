@@ -26,7 +26,7 @@ WITH new_items AS (
         ('Клавиатура', 'Проводная клавиатура с русской и английской раскладками.', 'demo/keyboard.jpg', 2490.00),
         ('Коврик для мыши', 'Тканевый коврик с нескользящим основанием, 30 × 25 см.', 'demo/mouse-pad.jpg', 450.00),
         ('Кабель USB-C', 'Кабель USB-C для зарядки и передачи данных, 1 метр.', 'demo/usb-c.jpg', 499.90)
-    RETURNING id, title, price
+    RETURNING id, title, image_path, price
 ), first_order AS (
     INSERT INTO "${appSchema}".orders (created_at)
     VALUES (CURRENT_TIMESTAMP - INTERVAL '7 days')
@@ -56,8 +56,8 @@ WITH new_items AS (
         (3, 'Коврик для мыши', 1),
         (3, 'Кабель USB-C', 2)
 )
-INSERT INTO "${appSchema}".order_items (order_id, item_id, title, price, quantity)
-SELECT o.id, i.id, i.title, i.price, p.quantity
+INSERT INTO "${appSchema}".order_items (order_id, item_id, title, price, image_path, quantity)
+SELECT o.id, i.id, i.title, i.price, i.image_path, p.quantity
 FROM positions p
 JOIN new_orders o ON o.demo_number = p.demo_number
 JOIN new_items i ON i.title = p.item_title;

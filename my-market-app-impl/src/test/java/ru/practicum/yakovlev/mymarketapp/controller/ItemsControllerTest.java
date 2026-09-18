@@ -7,6 +7,7 @@ import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.MvcResult;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.api.enums.ItemSort;
 import ru.practicum.yakovlev.mymarketapp.dto.ItemDto;
@@ -19,6 +20,7 @@ import ru.practicum.yakovlev.mymarketapp.support.MvcTestSupport;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -37,30 +39,52 @@ class ItemsControllerTest extends MvcTestSupport {
 
     @Test
     void rendersCatalogUsingDefaultParameters() throws Exception {
-        ItemPageDto page = new ItemPageDto(List.of(List.of(itemDto(1, 0))), new PagingDto(5, 1, false, false));
-        when(itemService.getItems(null, ItemSort.NO, 1, 5)).thenReturn(page);
-        mvc.perform(get("/items"))
+        ItemPageDto page = new ItemPageDto(List.of(itemDto(1, 0)), new PagingDto(10, 1, false, false));
+        when(itemService.getItems(null, ItemSort.NO, 1, 10)).thenReturn(page);
+        MvcResult result = mvc.perform(get("/items"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("items"))
-                .andExpect(model().attribute("items", page.items()))
                 .andExpect(model().attribute("sort", "NO"))
                 .andExpect(model().attribute("paging", page.paging()))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Coffee")));
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Coffee")))
+                .andReturn();
+
+        @SuppressWarnings("unchecked")
+        List<List<ItemDto>> rows = (List<List<ItemDto>>) result.getModelAndView().getModel().get("items");
+        assertThat(rows).hasSize(1);
+        assertThat(rows.getFirst()).extracting(ItemDto::id).containsExactly(1L, -1L, -1L);
+    }
+
+    @Test
+    void preparesCatalogRowsForView() throws Exception {
+        List<ItemDto> items = List.of(itemDto(1, 0), itemDto(2, 0), itemDto(3, 0), itemDto(4, 0));
+        when(itemService.getItems(null, ItemSort.NO, 1, 10))
+                .thenReturn(new ItemPageDto(items, new PagingDto(10, 1, false, false)));
+
+        MvcResult result = mvc.perform(get("/items"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        @SuppressWarnings("unchecked")
+        List<List<ItemDto>> rows = (List<List<ItemDto>>) result.getModelAndView().getModel().get("items");
+        assertThat(rows).hasSize(2).allSatisfy(row -> assertThat(row).hasSize(3));
+        assertThat(rows.getFirst()).extracting(ItemDto::id).containsExactly(1L, 2L, 3L);
+        assertThat(rows.getLast()).extracting(ItemDto::id).containsExactly(4L, -1L, -1L);
     }
 
     @Test
     void passesSearchSortingAndPagingToService() throws Exception {
-        ItemPageDto page = new ItemPageDto(List.of(), new PagingDto(2, 3, true, false));
-        when(itemService.getItems("tea", ItemSort.PRICE, 3, 2)).thenReturn(page);
+        ItemPageDto page = new ItemPageDto(List.of(), new PagingDto(20, 3, true, false));
+        when(itemService.getItems("tea", ItemSort.PRICE, 3, 20)).thenReturn(page);
         mvc.perform(get("/items")
                         .param("search", "tea")
                         .param("sort", "PRICE")
                         .param("pageNumber", "3")
-                        .param("pageSize", "2"))
+                        .param("pageSize", "20"))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("search", "tea"))
                 .andExpect(model().attribute("sort", "PRICE"));
-        verify(itemService).getItems("tea", ItemSort.PRICE, 3, 2);
+        verify(itemService).getItems("tea", ItemSort.PRICE, 3, 20);
     }
 
     @Test
@@ -83,7 +107,7 @@ class ItemsControllerTest extends MvcTestSupport {
                         .param("id", "1")
                         .param("action", "MINUS"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/items?sort=NO&pageNumber=1&pageSize=5"));
+                .andExpect(redirectedUrl("/items?sort=NO&pageNumber=1&pageSize=10"));
         verify(cartService).updateItem(1, CartAction.MINUS);
     }
 
@@ -119,7 +143,8 @@ class ItemsControllerTest extends MvcTestSupport {
     }
 
     @ParameterizedTest
-    @CsvSource({"pageNumber,0", "pageNumber,-1", "pageSize,0", "pageSize,-1", "sort,UNKNOWN", "pageNumber,text"})
+    @CsvSource({"pageNumber,0", "pageNumber,-1", "pageSize,0", "pageSize,-1", "pageSize,101",
+            "pageSize,100000", "sort,UNKNOWN", "pageNumber,text"})
     void rejectsInvalidCatalogParameters(String parameter, String value) throws Exception {
         mvc.perform(get("/items")
                         .param(parameter, value))

@@ -68,10 +68,12 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         long id = orderService.createOrder();
         item.setTitle("Changed");
         item.setPrice(new java.math.BigDecimal("99.00"));
+        item.setImagePath("changed/photo.jpg");
         itemRepository.saveAndFlush(item);
         OrderDto dto = orderService.getOrder(id);
         assertThat(dto.items().getFirst().title()).isEqualTo("Coffee");
         assertThat(dto.items().getFirst().price()).isEqualByComparingTo("12.50");
+        assertThat(dto.items().getFirst().imagePath()).isEqualTo("images/demo/photo.jpg");
         assertThat(dto.totalSum()).isEqualByComparingTo("12.50");
     }
 
@@ -91,8 +93,9 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         long second = orderService.createOrder();
         // Fix the timestamps so the assertion does not depend on the clock resolution.
         jdbc.update("update orders set created_at = timestamp '2025-01-01 00:00:00'");
-        assertThat(orderService.getOrders()).extracting(ru.practicum.yakovlev.mymarketapp.dto.OrderDto::id)
+        assertThat(orderService.getOrders().orders()).extracting(ru.practicum.yakovlev.mymarketapp.dto.OrderDto::id)
                 .containsExactly(second, first);
+        assertThat(orderService.getOrders().totalSum()).isEqualByComparingTo("25.00");
         assertThatThrownBy(() -> orderService.getOrder(Long.MAX_VALUE)).isInstanceOf(NotFoundException.class);
     }
 

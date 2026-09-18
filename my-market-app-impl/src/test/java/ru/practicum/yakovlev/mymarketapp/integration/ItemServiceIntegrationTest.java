@@ -15,8 +15,6 @@ import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.service.ItemService;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
@@ -49,54 +47,53 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
     void searchesBothFieldsAndIncludesPersistedCartQuantity() {
         cartService.updateItem(coffeeId, CartAction.PLUS);
         cartService.updateItem(coffeeId, CartAction.PLUS);
-        ItemPageDto page = itemService.getItems("  cOfFeE  ", ItemSort.ALPHA, 1, 5);
+        ItemPageDto page = itemService.getItems("  cOfFeE  ", ItemSort.ALPHA, 1, 10);
 
-        assertThat(realItems(page)).extracting(ItemDto::title)
+        assertThat(page.items()).extracting(ItemDto::title)
                 .containsExactly("Coffee", "Tea");
-        assertThat(realItems(page)).extracting(ItemDto::count)
+        assertThat(page.items()).extracting(ItemDto::count)
                 .containsExactly(2, 0);
-        assertThat(realItems(page).getFirst().imgPath())
+        assertThat(page.items().getFirst().imgPath())
                 .isEqualTo("images/default-image.svg");
-        assertThat(page.items().getFirst())
-                .hasSize(3);
-        assertThat(page.items().getFirst().getLast())
-                .isEqualTo(ItemDto.defaultItem());
+        assertThat(page.items()).hasSize(2);
     }
 
     @Test
     void sortsPricesAndReportsPageNavigation() {
-        ItemPageDto first = itemService.getItems(null, ItemSort.PRICE, 1, 2);
+        for (int i = 1; i <= 7; i++) {
+            itemRepository.saveAndFlush(item("Product " + i, Integer.toString(20 + i)));
+        }
 
-        assertThat(realItems(first)).extracting(ItemDto::title)
-                .containsExactly("Tea", "Cable");
+        ItemPageDto first = itemService.getItems(null, ItemSort.PRICE, 1, 10);
+
+        assertThat(first.items()).extracting(ItemDto::title)
+                .containsExactly("Tea", "Cable", "Mug", "Coffee", "Product 1", "Product 2",
+                        "Product 3", "Product 4", "Product 5", "Product 6");
         assertThat(first.paging())
-                .isEqualTo(new PagingDto(2, 1, false, true));
+                .isEqualTo(new PagingDto(10, 1, false, true));
 
-        ItemPageDto second = itemService.getItems(null, ItemSort.PRICE, 2, 2);
+        ItemPageDto second = itemService.getItems(null, ItemSort.PRICE, 2, 10);
 
-        assertThat(realItems(second)).extracting(ItemDto::title)
-                .containsExactly("Mug", "Coffee");
+        assertThat(second.items()).extracting(ItemDto::title)
+                .containsExactly("Product 7");
         assertThat(second.paging())
-                .isEqualTo(new PagingDto(2, 2, true, false));
+                .isEqualTo(new PagingDto(10, 2, true, false));
     }
 
     @Test
-    void alphabeticCatalogPadsLastOfTwoRows() {
-        ItemPageDto page = itemService.getItems(" ", ItemSort.ALPHA, 1, 5);
+    void alphabeticCatalogReturnsOnlyRealItems() {
+        ItemPageDto page = itemService.getItems(" ", ItemSort.ALPHA, 1, 10);
 
-        assertThat(realItems(page)).extracting(ItemDto::title)
+        assertThat(page.items()).extracting(ItemDto::title)
                 .containsExactly("Cable", "Coffee", "Mug", "Tea");
-        assertThat(page.items())
-                .hasSize(2);
-        assertThat(page.items().getLast()).extracting(ItemDto::id)
-                .containsExactly(realItems(page).getLast().id(), -1L, -1L);
+        assertThat(page.items()).hasSize(4);
     }
 
     @Test
     void unknownSearchAndPagePastEndAreEmpty() {
-        assertThat(itemService.getItems("missing", ItemSort.NO, 1, 5).items())
+        assertThat(itemService.getItems("missing", ItemSort.NO, 1, 10).items())
                 .isEmpty();
-        assertThat(itemService.getItems(null, ItemSort.PRICE, 10, 5).items())
+        assertThat(itemService.getItems(null, ItemSort.PRICE, 10, 10).items())
                 .isEmpty();
     }
 
@@ -108,9 +105,5 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
                 .isZero();
         assertThatThrownBy(() -> itemService.getItem(Long.MAX_VALUE))
                 .isInstanceOf(NotFoundException.class);
-    }
-
-    private List<ItemDto> realItems(ItemPageDto page) {
-        return page.items().stream().flatMap(List::stream).filter(item -> item.id() != -1).toList();
     }
 }

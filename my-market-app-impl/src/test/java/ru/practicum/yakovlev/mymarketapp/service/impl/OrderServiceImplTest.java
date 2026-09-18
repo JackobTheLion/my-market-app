@@ -8,6 +8,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
+import ru.practicum.yakovlev.mymarketapp.dto.OrdersPageDto;
 import ru.practicum.yakovlev.mymarketapp.exception.EmptyCartException;
 import ru.practicum.yakovlev.mymarketapp.exception.NotFoundException;
 import ru.practicum.yakovlev.mymarketapp.mapper.OrderMapper;
@@ -81,10 +82,26 @@ class OrderServiceImplTest {
     @Test
     void returnsMappedHistory() {
         List<Order> orders = List.of(new Order());
-        List<OrderDto> dtos = List.of(new OrderDto(1, List.of(), BigDecimal.ZERO));
+        List<OrderDto> dtos = List.of(
+                new OrderDto(1, List.of(), new BigDecimal("12.50")),
+                new OrderDto(2, List.of(), new BigDecimal("7.25"))
+        );
         when(orderRepository.findAllByOrderByCreatedAtDescIdDesc()).thenReturn(orders);
         when(orderMapper.toDtos(orders)).thenReturn(dtos);
-        assertThat(service.getOrders()).isSameAs(dtos);
+        OrdersPageDto page = service.getOrders();
+        assertThat(page.orders()).isSameAs(dtos);
+        assertThat(page.totalSum()).isEqualByComparingTo("19.75");
+    }
+
+    @Test
+    void returnsZeroTotalForEmptyHistory() {
+        when(orderRepository.findAllByOrderByCreatedAtDescIdDesc()).thenReturn(List.of());
+        when(orderMapper.toDtos(List.of())).thenReturn(List.of());
+
+        OrdersPageDto page = service.getOrders();
+
+        assertThat(page.orders()).isEmpty();
+        assertThat(page.totalSum()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test

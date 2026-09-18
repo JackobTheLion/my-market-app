@@ -7,13 +7,19 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.practicum.yakovlev.mymarketapp.api.controller.ItemsControllerApi;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.api.enums.ItemSort;
+import ru.practicum.yakovlev.mymarketapp.dto.ItemDto;
 import ru.practicum.yakovlev.mymarketapp.dto.ItemPageDto;
 import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.service.ItemService;
 
+import java.util.LinkedList;
+import java.util.List;
+
 @Controller
 @RequiredArgsConstructor
 public class ItemsController implements ItemsControllerApi {
+
+    private static final int ITEMS_PER_ROW = 3;
 
     private final ItemService itemService;
     private final CartService cartService;
@@ -28,7 +34,7 @@ public class ItemsController implements ItemsControllerApi {
     ) {
         ItemPageDto page = itemService.getItems(search, sort, pageNumber, pageSize);
 
-        model.addAttribute("items", page.items());
+        model.addAttribute("items", prepareRows(page.items()));
         model.addAttribute("search", search);
         model.addAttribute("sort", sort.name());
         model.addAttribute("paging", page.paging());
@@ -67,6 +73,21 @@ public class ItemsController implements ItemsControllerApi {
     public String updateItemInCart(long id, CartAction action, Model model) {
         cartService.updateItem(id, action);
         return getItem(id, model);
+    }
+
+    private List<List<ItemDto>> prepareRows(List<ItemDto> items) {
+        List<List<ItemDto>> rows = new LinkedList<>();
+        for (int offset = 0; offset < items.size(); offset += ITEMS_PER_ROW) {
+            List<ItemDto> row = new LinkedList<>(items.subList(
+                    offset,
+                    Math.min(offset + ITEMS_PER_ROW, items.size())
+            ));
+            while (row.size() < ITEMS_PER_ROW) {
+                row.add(ItemDto.defaultItem());
+            }
+            rows.add(List.copyOf(row));
+        }
+        return List.copyOf(rows);
     }
 
 }

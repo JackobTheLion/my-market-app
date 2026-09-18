@@ -52,51 +52,39 @@ class ItemServiceImplTest {
     @NullAndEmptySource
     @ValueSource(strings = {"  ", "\t\n"})
     void blankSearchUsesWholeCatalog(String search) {
-        PageRequest request = PageRequest.of(0, 5, ItemSort.NO.getSort());
+        PageRequest request = PageRequest.of(0, 10, ItemSort.NO.getSort());
         when(itemRepository.findAll(request)).thenReturn(new PageImpl<>(List.of(), request, 0));
-        ItemPageDto page = service.getItems(search, ItemSort.NO, 1, 5);
+        ItemPageDto page = service.getItems(search, ItemSort.NO, 1, 10);
         assertThat(page.items()).isEmpty();
-        assertThat(page.paging()).isEqualTo(new PagingDto(5, 1, false, false));
+        assertThat(page.paging()).isEqualTo(new PagingDto(10, 1, false, false));
         verifyNoInteractions(cartItemRepository);
         verify(itemRepository, never()).findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(any(), any(), any());
     }
 
     @Test
     void trimsSearchAndPassesSortingAndZeroBasedPage() {
-        PageRequest request = PageRequest.of(1, 2, ItemSort.PRICE.getSort());
+        PageRequest request = PageRequest.of(1, 10, ItemSort.PRICE.getSort());
         Item item = item(1, "Coffee", "12.50");
         when(itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("Coffee", "Coffee", request))
-                .thenReturn(new PageImpl<>(List.of(item), request, 5));
+                .thenReturn(new PageImpl<>(List.of(item), request, 25));
         CartItem cartItem = new CartItem(item, 4);
         cartItem.setItemId(1L); // @MapsId is populated by Hibernate only in persistence tests.
         when(cartItemRepository.findAllById(List.of(1L))).thenReturn(List.of(cartItem));
-        ItemPageDto page = service.getItems("  Coffee  ", ItemSort.PRICE, 2, 2);
-        assertThat(page.paging()).isEqualTo(new PagingDto(2, 2, true, true));
-        assertThat(page.items().getFirst().getFirst().count()).isEqualTo(4);
+        ItemPageDto page = service.getItems("  Coffee  ", ItemSort.PRICE, 2, 10);
+        assertThat(page.paging()).isEqualTo(new PagingDto(10, 2, true, true));
+        assertThat(page.items().getFirst().count()).isEqualTo(4);
     }
 
     @Test
-    void splitsRowsAndPadsOnlyLastRow() {
+    void returnsFlatItemListWithoutUiLayoutPlaceholders() {
         List<Item> items = List.of(item(1, "A", "1.00"), item(2, "B", "2.00"),
                 item(3, "C", "3.00"), item(4, "D", "4.00"));
-        PageRequest request = PageRequest.of(0, 5, ItemSort.ALPHA.getSort());
+        PageRequest request = PageRequest.of(0, 10, ItemSort.ALPHA.getSort());
         when(itemRepository.findAll(request)).thenReturn(new PageImpl<>(items, request, 4));
         when(cartItemRepository.findAllById(List.of(1L, 2L, 3L, 4L))).thenReturn(List.of());
-        ItemPageDto page = service.getItems(null, ItemSort.ALPHA, 1, 5);
-        assertThat(page.items()).hasSize(2).allSatisfy(row -> assertThat(row).hasSize(3));
-        assertThat(page.items().getFirst()).extracting(ItemDto::id).containsExactly(1L, 2L, 3L);
-        assertThat(page.items().getLast()).extracting(ItemDto::id).containsExactly(4L, -1L, -1L);
-        assertThat(page.items().getFirst()).allSatisfy(dto -> assertThat(dto.count()).isZero());
-    }
-
-    @Test
-    void fullRowNeedsNoPadding() {
-        PageRequest request = PageRequest.of(0, 3);
-        when(itemRepository.findAll(request)).thenReturn(new PageImpl<>(List.of(
-                item(1, "A", "1"), item(2, "B", "2"), item(3, "C", "3")), request, 3));
-        when(cartItemRepository.findAllById(List.of(1L, 2L, 3L))).thenReturn(List.of());
-        assertThat(service.getItems(null, ItemSort.NO, 1, 3).items().getFirst())
-                .extracting(ItemDto::id).containsExactly(1L, 2L, 3L);
+        ItemPageDto page = service.getItems(null, ItemSort.ALPHA, 1, 10);
+        assertThat(page.items()).extracting(ItemDto::id).containsExactly(1L, 2L, 3L, 4L);
+        assertThat(page.items()).allSatisfy(dto -> assertThat(dto.count()).isZero());
     }
 
     @Test
@@ -129,7 +117,7 @@ class ItemServiceImplTest {
     @ParameterizedTest
     @ValueSource(ints = {0, -1})
     void rejectsInvalidPageNumber(int page) {
-        assertThatThrownBy(() -> service.getItems(null, ItemSort.NO, page, 5)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.getItems(null, ItemSort.NO, page, 10)).isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(itemRepository, cartItemRepository);
     }
 

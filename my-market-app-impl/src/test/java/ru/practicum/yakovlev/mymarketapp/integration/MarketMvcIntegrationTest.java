@@ -11,6 +11,8 @@ import ru.practicum.yakovlev.mymarketapp.repository.OrderRepository;
 import ru.practicum.yakovlev.mymarketapp.service.OrderService;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
+import java.math.BigDecimal;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -55,7 +57,7 @@ class MarketMvcIntegrationTest extends IntegrationTestSupport {
                 .isEqualTo(2);
         MvcResult result = mvc.perform(post("/buy"))
                 .andExpect(status().is3xxRedirection()).andReturn();
-        OrderDto order = orderService.getOrders().getFirst();
+        OrderDto order = orderService.getOrders().orders().getFirst();
 
         assertThat(result.getResponse().getRedirectedUrl())
                 .isEqualTo("/orders/" + order.id() + "?newOrder=true");
@@ -72,7 +74,8 @@ class MarketMvcIntegrationTest extends IntegrationTestSupport {
         mvc.perform(get("/orders"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("orders"))
-                .andExpect(model().attribute("orders", java.util.List.of(order)));
+                .andExpect(model().attribute("orders", java.util.List.of(order)))
+                .andExpect(model().attribute("total", new BigDecimal("25.00")));
     }
 
     @Test

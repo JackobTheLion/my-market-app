@@ -40,6 +40,13 @@ public class Item {
         this.title = title;
         this.description = description;
         this.imagePath = imagePath;
+        setPrice(price);
+    }
+
+    public void setPrice(BigDecimal price) {
+        if (price == null || price.signum() <= 0) {
+            throw new IllegalArgumentException("Price must be greater than zero");
+        }
         this.price = price;
     }
 }

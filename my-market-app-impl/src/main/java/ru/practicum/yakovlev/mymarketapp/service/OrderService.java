@@ -1,12 +1,11 @@
 package ru.practicum.yakovlev.mymarketapp.service;
 
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
-
-import java.util.List;
+import ru.practicum.yakovlev.mymarketapp.dto.OrdersPageDto;
 
 public interface OrderService {
 
-    List<OrderDto> getOrders();
+    OrdersPageDto getOrders();
 
     OrderDto getOrder(long id);
 

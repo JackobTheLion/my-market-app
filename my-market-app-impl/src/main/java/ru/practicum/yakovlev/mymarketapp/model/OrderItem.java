@@ -39,14 +39,24 @@ public class OrderItem {
     @Column(name = "price")
     private BigDecimal price;
 
+    @Column(name = "image_path")
+    private String imagePath;
+
     @Column(name = "quantity")
     private int quantity;
 
     public OrderItem(Order order, Item item, int quantity) {
+        if (item.getPrice() == null || item.getPrice().signum() <= 0) {
+            throw new IllegalArgumentException("Price must be greater than zero");
+        }
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero");
+        }
         this.order = order;
         this.item = item;
         this.title = item.getTitle();
         this.price = item.getPrice();
+        this.imagePath = item.getImagePath();
         this.quantity = quantity;
     }
 

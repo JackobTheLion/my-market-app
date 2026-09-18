@@ -21,6 +21,11 @@
                 </div>
             </div>
         </div>
+        <div class="row p-2">
+            <div class="col">
+                <h3 class="text-end" th:text="${'Общая сумма всех заказов: '+total+' руб.'}"></h3>
+            </div>
+        </div>
         <div class="row p-2" th:each="order : ${orders}">
             <div class="col">
                 <div class="card">

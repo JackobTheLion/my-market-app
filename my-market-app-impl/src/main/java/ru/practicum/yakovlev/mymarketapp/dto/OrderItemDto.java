@@ -6,6 +6,7 @@ public record OrderItemDto(
         long id,
         String title,
         BigDecimal price,
+        String imagePath,
         int count
 ) {
 }

@@ -40,13 +40,12 @@ public class CartServiceImpl implements CartService {
         }
     }
 
-    private boolean addItem(Item item) {
+    private void addItem(Item item) {
         cartItemRepository.findById(item.getId())
                 .ifPresentOrElse(
                         CartItem::increment,
                         () -> cartItemRepository.save(new CartItem(item, 1))
                 );
-        return true;
     }
 
     private void reduceOrDeleteItem(long itemId) {
