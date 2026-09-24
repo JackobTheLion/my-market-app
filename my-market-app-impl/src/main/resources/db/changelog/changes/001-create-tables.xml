@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+    <changeSet id="001-create-tables" author="yakovlev">
+        <createTable tableName="items" schemaName="${appSchema}">
+            <column name="id" type="BIGINT" autoIncrement="true" generationType="BY DEFAULT">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="title" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT" defaultValue="">
+                <constraints nullable="false"/>
+            </column>
+            <column name="image_path" type="VARCHAR(1024)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="price" type="NUMERIC(19,2)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createTable tableName="cart_items" schemaName="${appSchema}">
+            <column name="item_id" type="BIGINT">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="quantity" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createTable tableName="orders" schemaName="${appSchema}">
+            <column name="id" type="BIGINT" autoIncrement="true" generationType="BY DEFAULT">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createTable tableName="order_items" schemaName="${appSchema}">
+            <column name="id" type="BIGINT" autoIncrement="true" generationType="BY DEFAULT">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="order_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="item_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="price" type="NUMERIC(19,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="image_path" type="VARCHAR(1024)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="quantity" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <sql>
+            ALTER TABLE "${appSchema}".items
+                ADD CONSTRAINT items_price_positive CHECK (price &gt; 0);
+            ALTER TABLE "${appSchema}".cart_items
+                ADD CONSTRAINT cart_items_quantity_positive CHECK (quantity &gt; 0);
+            ALTER TABLE "${appSchema}".order_items
+                ADD CONSTRAINT order_items_price_positive CHECK (price &gt; 0);
+            ALTER TABLE "${appSchema}".order_items
+                ADD CONSTRAINT order_items_quantity_positive CHECK (quantity &gt; 0);
+        </sql>
+
+        <addForeignKeyConstraint constraintName="cart_items_item_fk"
+                                 baseTableSchemaName="${appSchema}" baseTableName="cart_items" baseColumnNames="item_id"
+                                 referencedTableSchemaName="${appSchema}" referencedTableName="items" referencedColumnNames="id"
+                                 onDelete="CASCADE"/>
+        <addForeignKeyConstraint constraintName="order_items_order_fk"
+                                 baseTableSchemaName="${appSchema}" baseTableName="order_items" baseColumnNames="order_id"
+                                 referencedTableSchemaName="${appSchema}" referencedTableName="orders" referencedColumnNames="id"
+                                 onDelete="CASCADE"/>
+        <addForeignKeyConstraint constraintName="order_items_item_fk"
+                                 baseTableSchemaName="${appSchema}" baseTableName="order_items" baseColumnNames="item_id"
+                                 referencedTableSchemaName="${appSchema}" referencedTableName="items" referencedColumnNames="id"
+                                 onDelete="RESTRICT"/>
+        <addUniqueConstraint constraintName="order_items_order_item_unique"
+                             schemaName="${appSchema}" tableName="order_items" columnNames="order_id, item_id"/>
+
+        <rollback>
+            <dropTable tableName="order_items" schemaName="${appSchema}"/>
+            <dropTable tableName="orders" schemaName="${appSchema}"/>
+            <dropTable tableName="cart_items" schemaName="${appSchema}"/>
+            <dropTable tableName="items" schemaName="${appSchema}"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

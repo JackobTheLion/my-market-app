@@ -1,0 +1,28 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: my-market-app
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    properties:
+      hibernate:
+        default_schema: ${DB_SCHEMA:public}
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    default-schema: ${DB_SCHEMA:public}
+    parameters:
+      appSchema: ${spring.liquibase.default-schema}
+      insertDemoData: ${application.database.demo.insert-demo-data}
+
+application:
+  images:
+    root: ${IMAGES_ROOT:images}
+    default-image: ${IMAGES_DEFAULT_IMAGE:default-image.svg}
+  database:
+    demo:
+      insert-demo-data: ${INSERT_DEMO_DATA:false}

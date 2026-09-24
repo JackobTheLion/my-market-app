@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/my_market_app
+      DB_USERNAME: market
+      DB_PASSWORD: market
+      DB_SCHEMA: public
+      IMAGES_ROOT: /app/images
+      INSERT_DEMO_DATA: true
+    volumes:
+      - ./images:/app/images
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: my_market_app
+      POSTGRES_USER: market
+      POSTGRES_PASSWORD: market
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

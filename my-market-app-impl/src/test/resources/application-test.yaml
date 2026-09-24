@@ -1,0 +1,25 @@
+spring:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: public
+  liquibase:
+    default-schema: public
+    parameters:
+      appSchema: public
+      insertDemoData: false
+
+application:
+  images:
+    root: images
+    default-image: default-image.svg
+  database:
+    demo:
+      insert-demo-data: false
+
+logging:
+  level:
+    org.springframework.test.context.cache: DEBUG
