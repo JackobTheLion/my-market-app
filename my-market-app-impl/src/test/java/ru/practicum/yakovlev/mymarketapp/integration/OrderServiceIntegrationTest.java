@@ -2,9 +2,11 @@ package ru.practicum.yakovlev.mymarketapp.integration;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DataAccessException;
+import reactor.test.StepVerifier;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
+import ru.practicum.yakovlev.mymarketapp.dto.OrderItemDto;
 import ru.practicum.yakovlev.mymarketapp.exception.EmptyCartException;
 import ru.practicum.yakovlev.mymarketapp.exception.NotFoundException;
 import ru.practicum.yakovlev.mymarketapp.model.Item;
@@ -16,110 +18,191 @@ import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.service.OrderService;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
+import java.math.BigDecimal;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
 class OrderServiceIntegrationTest extends IntegrationTestSupport {
     @Autowired
-    private OrderService orderService;
-
+    private OrderService service;
     @Autowired
-    private CartService cartService;
-
+    private CartService cart;
     @Autowired
-    private ItemRepository itemRepository;
-
+    private ItemRepository items;
     @Autowired
-    private CartItemRepository cartItemRepository;
-
+    private CartItemRepository cartItems;
     @Autowired
-    private OrderRepository orderRepository;
-
+    private OrderRepository orders;
     @Autowired
-    private OrderItemRepository orderItemRepository;
-
-    @Autowired
-    private JdbcTemplate jdbc;
+    private OrderItemRepository positions;
 
     @Test
-    void purchaseCommitsOrderPositionsAndClearsCart() {
-        Item coffee = itemRepository.saveAndFlush(item("Coffee", "12.50"));
-        Item tea = itemRepository.saveAndFlush(item("Tea", "3.25"));
-        cartService.updateItem(coffee.getId(), CartAction.PLUS);
-        cartService.updateItem(coffee.getId(), CartAction.PLUS);
-        cartService.updateItem(tea.getId(), CartAction.PLUS);
-        long id = orderService.createOrder();
-
-        assertThat(orderRepository.count()).isEqualTo(1);
-        assertThat(orderItemRepository.count()).isEqualTo(2);
-        assertThat(cartItemRepository.count()).isZero();
-        OrderDto dto = orderService.getOrder(id);
-        assertThat(dto.items()).extracting(ru.practicum.yakovlev.mymarketapp.dto.OrderItemDto::id)
-                .containsExactly(coffee.getId(), tea.getId());
-        assertThat(dto.items()).extracting(ru.practicum.yakovlev.mymarketapp.dto.OrderItemDto::count).containsExactly(2, 1);
-        assertThat(dto.totalSum()).isEqualByComparingTo("28.25");
+    void purchaseCommitsPositionsAndClearsCart() {
+        Item coffee = items.save(item("Coffee", "12.50"))
+                .block();
+        Item tea = items.save(item("Tea", "3.25"))
+                .block();
+        cart.updateItem(coffee.getId(), CartAction.PLUS)
+                .then(cart.updateItem(coffee.getId(), CartAction.PLUS))
+                .then(cart.updateItem(tea.getId(), CartAction.PLUS))
+                .block();
+        long id = service.createOrder()
+                .block();
+        StepVerifier.create(orders.count())
+                .expectNext(1L)
+                .verifyComplete();
+        StepVerifier.create(positions.count())
+                .expectNext(2L)
+                .verifyComplete();
+        StepVerifier.create(cartItems.count())
+                .expectNext(0L)
+                .verifyComplete();
+        StepVerifier.create(service.getOrder(id))
+                .assertNext(dto -> {
+                    assertThat(dto.items())
+                            .extracting(OrderItemDto::id)
+                            .containsExactly(coffee.getId(), tea.getId());
+                    assertThat(dto.items())
+                            .extracting(OrderItemDto::count)
+                            .containsExactly(2, 1);
+                    assertThat(dto.totalSum()).isEqualByComparingTo("28.25");
+                })
+                .verifyComplete();
     }
 
     @Test
-    void catalogChangesLeaveOrderSnapshotUnchanged() {
-        Item item = itemRepository.saveAndFlush(item("Coffee", "12.50"));
-        cartService.updateItem(item.getId(), CartAction.PLUS);
-        long id = orderService.createOrder();
-        item.setTitle("Changed");
-        item.setPrice(new java.math.BigDecimal("99.00"));
-        item.setImagePath("changed/photo.jpg");
-        itemRepository.saveAndFlush(item);
-        OrderDto dto = orderService.getOrder(id);
-        assertThat(dto.items().getFirst().title()).isEqualTo("Coffee");
-        assertThat(dto.items().getFirst().price()).isEqualByComparingTo("12.50");
-        assertThat(dto.items().getFirst().imagePath()).isEqualTo("images/demo/photo.jpg");
-        assertThat(dto.totalSum()).isEqualByComparingTo("12.50");
+    void catalogEditsLeaveSnapshotUnchanged() {
+        Item coffee = items.save(item("Coffee", "12.50"))
+                .block();
+        cart.updateItem(coffee.getId(), CartAction.PLUS)
+                .block();
+        long id = service.createOrder()
+                .block();
+        coffee.setTitle("Changed");
+        coffee.setPrice(new BigDecimal("99.00"));
+        coffee.setImagePath("changed/photo.jpg");
+        items.save(coffee)
+                .block();
+        StepVerifier.create(service.getOrder(id))
+                .assertNext(dto -> {
+                    assertThat(dto.items().getFirst().title()).isEqualTo("Coffee");
+                    assertThat(dto.items().getFirst().price()).isEqualByComparingTo("12.50");
+                    assertThat(dto.items().getFirst().imagePath()).isEqualTo("images/demo/photo.jpg");
+                    assertThat(dto.totalSum()).isEqualByComparingTo("12.50");
+                })
+                .verifyComplete();
     }
 
     @Test
-    void emptyCartFailsWithoutCreatingOrder() {
-        assertThatThrownBy(orderService::createOrder).isInstanceOf(EmptyCartException.class);
-        assertThat(orderRepository.count()).isZero();
-        assertThat(orderItemRepository.count()).isZero();
+    void emptyCartDoesNotCreateOrder() {
+        StepVerifier.create(service.createOrder())
+                .expectError(EmptyCartException.class)
+                .verify();
+        StepVerifier.create(orders.count())
+                .expectNext(0L)
+                .verifyComplete();
+        StepVerifier.create(positions.count())
+                .expectNext(0L)
+                .verifyComplete();
     }
 
     @Test
     void historyIsNewestFirstAndMissingOrderIsRejected() {
-        long id = itemRepository.saveAndFlush(item("Coffee", "12.50")).getId();
-        cartService.updateItem(id, CartAction.PLUS);
-        long first = orderService.createOrder();
-        cartService.updateItem(id, CartAction.PLUS);
-        long second = orderService.createOrder();
-        // Fix the timestamps so the assertion does not depend on the clock resolution.
-        jdbc.update("update orders set created_at = timestamp '2025-01-01 00:00:00'");
-        assertThat(orderService.getOrders().orders()).extracting(ru.practicum.yakovlev.mymarketapp.dto.OrderDto::id)
-                .containsExactly(second, first);
-        assertThat(orderService.getOrders().totalSum()).isEqualByComparingTo("25.00");
-        assertThatThrownBy(() -> orderService.getOrder(Long.MAX_VALUE)).isInstanceOf(NotFoundException.class);
+        long itemId = items.save(item("Coffee", "12.50"))
+                .block()
+                .getId();
+        cart.updateItem(itemId, CartAction.PLUS)
+                .block();
+        long first = service.createOrder()
+                .block();
+        cart.updateItem(itemId, CartAction.PLUS)
+                .block();
+        long second = service.createOrder()
+                .block();
+        sql("UPDATE orders SET created_at = timestamp '2025-01-01 00:00:00'")
+                .block();
+        StepVerifier.create(service.getOrders())
+                .assertNext(page -> {
+                    assertThat(page.orders())
+                            .extracting(OrderDto::id)
+                            .containsExactly(second, first);
+                    assertThat(page.totalSum()).isEqualByComparingTo("25.00");
+                })
+                .verifyComplete();
+        StepVerifier.create(service.getOrder(Long.MAX_VALUE))
+                .expectError(NotFoundException.class)
+                .verify();
     }
 
     @Test
-    void failureWhileClearingCartRollsBackAlreadyFlushedOrderAndPositions() {
-        long id = itemRepository.saveAndFlush(item("Coffee", "12.50")).getId();
-        cartService.updateItem(id, CartAction.PLUS);
-        jdbc.execute("""
+    void cleanupFailureRollsBackOrderAndPositionsAndPreservesCart() {
+        long id = items.save(item("Coffee", "12.50"))
+                .block()
+                .getId();
+        cart.updateItem(id, CartAction.PLUS)
+                .block();
+        sql("""
                 CREATE FUNCTION reject_cart_delete() RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN RAISE EXCEPTION 'simulated cart cleanup failure'; END;
                 $$
-                """);
+                """)
+                .block();
         try {
-            jdbc.execute("CREATE TRIGGER reject_cart_delete BEFORE DELETE ON cart_items FOR EACH ROW EXECUTE FUNCTION reject_cart_delete()");
-            assertThatThrownBy(orderService::createOrder)
-                    .isInstanceOf(org.springframework.dao.DataAccessException.class)
-                    .hasStackTraceContaining("simulated cart cleanup failure");
-            // Repository calls start fresh transactions, outside the failed service transaction.
-            assertThat(orderRepository.count()).isZero();
-            assertThat(orderItemRepository.count()).isZero();
-            assertThat(cartItemRepository.findById(id).orElseThrow().getQuantity()).isEqualTo(1);
+            sql("CREATE TRIGGER reject_cart_delete BEFORE DELETE ON cart_items FOR EACH ROW EXECUTE FUNCTION reject_cart_delete()")
+                    .block();
+            StepVerifier.create(service.createOrder())
+                    .expectErrorSatisfies(error ->
+                            assertThat(error)
+                                    .isInstanceOf(DataAccessException.class)
+                                    .hasStackTraceContaining("simulated cart cleanup failure"))
+                    .verify();
+            StepVerifier.create(orders.count())
+                    .expectNext(0L)
+                    .verifyComplete();
+            StepVerifier.create(positions.count())
+                    .expectNext(0L)
+                    .verifyComplete();
+            StepVerifier.create(cartItems.findById(id))
+                    .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(1))
+                    .verifyComplete();
         } finally {
-            jdbc.execute("DROP TRIGGER IF EXISTS reject_cart_delete ON cart_items");
-            jdbc.execute("DROP FUNCTION IF EXISTS reject_cart_delete()");
+            sql("DROP TRIGGER IF EXISTS reject_cart_delete ON cart_items")
+                    .then(sql("DROP FUNCTION IF EXISTS reject_cart_delete()"))
+                    .block();
         }
     }
+
+    @Test
+    void positionFailureRollsBackOrderAndKeepsCart() {
+        long id = items.save(item("Coffee", "12.50"))
+                .block()
+                .getId();
+        cart.updateItem(id, CartAction.PLUS)
+                .block();
+        sql("""
+                CREATE FUNCTION reject_order_item() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION 'simulated position failure'; END;
+                $$
+                """)
+                .block();
+        try {
+            sql("CREATE TRIGGER reject_order_item BEFORE INSERT ON order_items FOR EACH ROW EXECUTE FUNCTION reject_order_item()")
+                    .block();
+            StepVerifier.create(service.createOrder())
+                    .expectError(DataAccessException.class)
+                    .verify();
+            StepVerifier.create(orders.count())
+                    .expectNext(0L)
+                    .verifyComplete();
+            StepVerifier.create(cartItems.count())
+                    .expectNext(1L)
+                    .verifyComplete();
+        } finally {
+            sql("DROP TRIGGER IF EXISTS reject_order_item ON order_items")
+                    .then(sql("DROP FUNCTION IF EXISTS reject_order_item()"))
+                    .block();
+        }
+    }
+
 }

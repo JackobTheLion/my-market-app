@@ -4,7 +4,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DB_URL: jdbc:postgresql://db:5432/my_market_app
+      R2DBC_URL: r2dbc:postgresql://db:5432/my_market_app
+      JDBC_URL: jdbc:postgresql://db:5432/my_market_app
       DB_USERNAME: market
       DB_PASSWORD: market
       DB_SCHEMA: public

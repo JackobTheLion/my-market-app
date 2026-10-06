@@ -1,65 +1,75 @@
 package ru.practicum.yakovlev.mymarketapp.repository;
 
-import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
-import ru.practicum.yakovlev.mymarketapp.model.CartItem;
-import ru.practicum.yakovlev.mymarketapp.model.Item;
+import org.springframework.dao.DataIntegrityViolationException;
+import reactor.test.StepVerifier;
 import ru.practicum.yakovlev.mymarketapp.model.Order;
-import ru.practicum.yakovlev.mymarketapp.support.JpaTestSupport;
+import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
-class PositiveValueConstraintTest extends JpaTestSupport {
-
+class PositiveValueConstraintTest extends IntegrationTestSupport {
     @Autowired
-    private TestEntityManager entityManager;
+    private ItemRepository items;
+    @Autowired
+    private OrderRepository orders;
 
     @Test
-    void databaseRejectsNonPositiveItemPrice() {
-        Item item = entityManager.persistAndFlush(item("Coffee", "12.50"));
-
-        assertThatThrownBy(() -> executeUpdate("update items set price = 0 where id = :id", item.getId()))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    @Test
-    void databaseRejectsNonPositiveCartQuantity() {
-        Item item = entityManager.persist(item("Coffee", "12.50"));
-        entityManager.persistAndFlush(new CartItem(item, 1));
-
-        assertThatThrownBy(() -> executeUpdate("update cart_items set quantity = 0 where item_id = :id", item.getId()))
-                .isInstanceOf(ConstraintViolationException.class);
+    void rejectsNonPositiveCatalogPriceInDatabase() {
+        StepVerifier.create(sql("INSERT INTO items (title, description, price) VALUES ('Invalid', '', 0)"))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
     }
 
     @Test
-    void databaseRejectsNonPositiveOrderItemPrice() {
-        Order order = persistedOrder();
-
-        assertThatThrownBy(() -> executeUpdate("update order_items set price = 0 where order_id = :id", order.getId()))
-                .isInstanceOf(ConstraintViolationException.class);
+    void rejectsNonPositiveCartQuantityInDatabase() {
+        long id = items.save(item("Coffee", "12.50"))
+                .block()
+                .getId();
+        StepVerifier.create(sql("INSERT INTO cart_items (item_id, quantity) VALUES (" + id + ", 0)"))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
     }
 
     @Test
-    void databaseRejectsNonPositiveOrderItemQuantity() {
-        Order order = persistedOrder();
-
-        assertThatThrownBy(() -> executeUpdate("update order_items set quantity = 0 where order_id = :id", order.getId()))
-                .isInstanceOf(ConstraintViolationException.class);
+    void rejectsNonPositiveOrderQuantityAndPriceInDatabase() {
+        long itemId = items.save(item("Coffee", "12.50"))
+                .block()
+                .getId();
+        long orderId = orders.save(new Order())
+                .block()
+                .getId();
+        String prefix = "INSERT INTO order_items (order_id, item_id, title, price, quantity) VALUES ("
+                + orderId + ", " + itemId + ", 'Coffee', ";
+        StepVerifier.create(sql(prefix + "0, 1)"))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
+        StepVerifier.create(sql(prefix + "12.50, 0)"))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
     }
 
-    private Order persistedOrder() {
-        Item item = entityManager.persist(item("Coffee", "12.50"));
-        Order order = new Order();
-        order.addItem(item, 1);
-        return entityManager.persistAndFlush(order);
-    }
-
-    private void executeUpdate(String sql, long id) {
-        entityManager.getEntityManager().createNativeQuery(sql)
-                .setParameter("id", id)
-                .executeUpdate();
+    @Test
+    void foreignKeysAndUniqueOrderPositionAreEnforced() {
+        StepVerifier.create(sql("INSERT INTO cart_items (item_id, quantity) VALUES (9223372036854775807, 1)"))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
+        long itemId = items.save(item("Coffee", "12.50"))
+                .block()
+                .getId();
+        long orderId = orders.save(new Order())
+                .block()
+                .getId();
+        String insert = "INSERT INTO order_items (order_id, item_id, title, price, quantity) VALUES ("
+                + orderId + ", " + itemId + ", 'Coffee', 12.50, 1)";
+        sql(insert)
+                .block();
+        StepVerifier.create(sql(insert))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
+        StepVerifier.create(items.deleteById(itemId))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
     }
 }

@@ -12,7 +12,7 @@ import ru.practicum.yakovlev.mymarketapp.model.OrderItem;
 )
 public interface OrderItemMapper {
 
-    @Mapping(target = "id", source = "item.id")
+    @Mapping(target = "id", source = "itemId")
     @Mapping(target = "imagePath", source = "imagePath", qualifiedByName = "imageUrl")
     @Mapping(target = "count", source = "quantity")
     OrderItemDto toDto(OrderItem orderItem);
