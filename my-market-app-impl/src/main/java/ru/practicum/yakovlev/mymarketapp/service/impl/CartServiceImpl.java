@@ -8,7 +8,6 @@ import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.dto.CartDto;
 import ru.practicum.yakovlev.mymarketapp.exception.NotFoundException;
 import ru.practicum.yakovlev.mymarketapp.mapper.CartMapper;
-import ru.practicum.yakovlev.mymarketapp.model.CartItem;
 import ru.practicum.yakovlev.mymarketapp.model.Item;
 import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.ItemRepository;
@@ -45,17 +44,10 @@ public class CartServiceImpl implements CartService {
     }
 
     private Mono<Void> reduceOrDeleteItem(long itemId) {
-        return cartItemRepository.findById(itemId)
-                .flatMap(this::removeOne);
-    }
-
-    private Mono<Void> removeOne(CartItem cartItem) {
-        if (cartItem.getQuantity() == 1) {
-            return cartItemRepository.delete(cartItem);
-        }
-
-        cartItem.decrement();
-        return cartItemRepository.save(cartItem)
+        return cartItemRepository.decrement(itemId)
+                .flatMap(updated -> updated == 0
+                        ? cartItemRepository.deleteLast(itemId)
+                        : Mono.just(updated))
                 .then();
     }
 
@@ -64,7 +56,7 @@ public class CartServiceImpl implements CartService {
     }
 
     private Mono<Item> findItemOrThrow(Long itemId) {
-        return itemRepository.findById(itemId)
+        return itemRepository.findByIdForUpdate(itemId)
                 .switchIfEmpty(Mono.error(new NotFoundException("Item not found: " + itemId)));
     }
 }

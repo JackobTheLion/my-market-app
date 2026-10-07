@@ -14,7 +14,6 @@ import ru.practicum.yakovlev.mymarketapp.model.Item;
 import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.ItemRepository;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
@@ -32,37 +31,40 @@ class CartServiceImplTest {
     @Test
     void minusDeletesLastUnit() {
         Item coffee = item(1, "Coffee", "12.50");
-        CartItem cartItem = new CartItem(coffee, 1);
-        when(itemRepository.findById(1L)).thenReturn(Mono.just(coffee));
-        when(cartItemRepository.findById(1L)).thenReturn(Mono.just(cartItem));
-        when(cartItemRepository.delete(cartItem)).thenReturn(Mono.empty());
+        when(itemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(coffee));
+        when(cartItemRepository.decrement(1L)).thenReturn(Mono.just(0));
+        when(cartItemRepository.deleteLast(1L)).thenReturn(Mono.just(1));
         StepVerifier.create(service.updateItem(1, CartAction.MINUS))
                 .verifyComplete();
-        verify(cartItemRepository)
-                .delete(cartItem);
-        verify(cartItemRepository, never())
-                .save(any(CartItem.class));
+        verify(cartItemRepository).deleteLast(1L);
+        verify(cartItemRepository, never()).findById(anyLong());
+        verify(cartItemRepository, never()).save(any(CartItem.class));
     }
 
     @Test
     void minusDecrementsLargerQuantity() {
         Item coffee = item(1, "Coffee", "12.50");
-        CartItem cartItem = new CartItem(coffee, 3);
-        when(itemRepository.findById(1L)).thenReturn(Mono.just(coffee));
-        when(cartItemRepository.findById(1L)).thenReturn(Mono.just(cartItem));
-        when(cartItemRepository.save(cartItem)).thenReturn(Mono.just(cartItem));
+        when(itemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(coffee));
+        when(cartItemRepository.decrement(1L)).thenReturn(Mono.just(1));
         StepVerifier.create(service.updateItem(1, CartAction.MINUS))
                 .verifyComplete();
-        assertThat(cartItem.getQuantity()).isEqualTo(2);
-        verify(cartItemRepository)
-                .save(cartItem);
-        verify(cartItemRepository, never())
-                .delete(any(CartItem.class));
+        verify(cartItemRepository).decrement(1L);
+        verify(cartItemRepository, never()).deleteLast(anyLong());
+        verify(cartItemRepository, never()).save(any(CartItem.class));
+    }
+
+    @Test
+    void minusOnMissingPositionCompletes() {
+        when(itemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
+        when(cartItemRepository.decrement(1L)).thenReturn(Mono.just(0));
+        when(cartItemRepository.deleteLast(1L)).thenReturn(Mono.just(0));
+        StepVerifier.create(service.updateItem(1, CartAction.MINUS))
+                .verifyComplete();
     }
 
     @Test
     void deleteRemovesWholePosition() {
-        when(itemRepository.findById(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
+        when(itemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
         when(cartItemRepository.deleteById(1L)).thenReturn(Mono.empty());
         StepVerifier.create(service.updateItem(1, CartAction.DELETE))
                 .verifyComplete();
