@@ -45,7 +45,7 @@ class OrderServiceImplTest {
     @Test
     void savesSnapshotBeforeDeletingCart() {
         Item coffee = item(1, "Coffee", "12.50");
-        when(cartItemRepository.findAllWithItems()).thenReturn(Flux.just(new CartItem(coffee, 2)));
+        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(coffee, 2)));
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> {
                     Order order = invocation.getArgument(0);
@@ -68,7 +68,10 @@ class OrderServiceImplTest {
                                     .thenMany(Flux.empty()));
                 });
         AtomicBoolean cartDeleted = new AtomicBoolean();
-        when(cartItemRepository.deleteAllById(List.of(1L))).thenReturn(Mono.fromRunnable(() -> cartDeleted.set(true)));
+        when(cartItemRepository.deletePurchasedItems(List.of(1L))).thenReturn(Mono.fromSupplier(() -> {
+            cartDeleted.set(true);
+            return 1;
+        }));
         StepVerifier.create(service.createOrder())
                 .then(() -> {
                     assertThat(cartDeleted).isFalse();
@@ -84,24 +87,24 @@ class OrderServiceImplTest {
 
     @Test
     void emptyCartEmitsErrorWithoutSaving() {
-        when(cartItemRepository.findAllWithItems()).thenReturn(Flux.empty());
+        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.empty());
         StepVerifier.create(service.createOrder())
                 .expectError(EmptyCartException.class)
                 .verify();
         verifyNoInteractions(orderRepository, orderItemRepository);
         verify(cartItemRepository, never())
-                .deleteAllById(anyIterable());
+                .deletePurchasedItems(anyList());
     }
 
     @Test
     void failedSaveDoesNotDeleteCart() {
-        when(cartItemRepository.findAllWithItems()).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
+        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
         when(orderRepository.save(any(Order.class))).thenReturn(Mono.error(new DataIntegrityViolationException("failed")));
         StepVerifier.create(service.createOrder())
                 .expectError(DataIntegrityViolationException.class)
                 .verify();
         verify(cartItemRepository, never())
-                .deleteAllById(anyIterable());
+                .deletePurchasedItems(anyList());
     }
 
     @Test

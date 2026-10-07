@@ -6,7 +6,13 @@ import org.springframework.data.r2dbc.repository.Query;
 import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.model.CartItem;
 
+import java.util.List;
+
 public interface CartItemRepository extends ReactiveCrudRepository<CartItem, Long>, CartItemRepositoryCustom {
+
+    @Modifying
+    @Query("DELETE FROM cart_items WHERE item_id IN (:itemIds)")
+    Mono<Integer> deletePurchasedItems(List<Long> itemIds);
 
     @Modifying
     @Query("INSERT INTO cart_items (item_id, quantity) VALUES (:itemId, 1) "

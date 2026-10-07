@@ -70,7 +70,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public Mono<Long> createOrder() {
-        return cartItemRepository.findAllWithItems()
+        return cartItemRepository.findAllWithItemsForUpdate()
                 .collectList()
                 .filter(cartItems -> !cartItems.isEmpty())
                 .switchIfEmpty(Mono.error(new EmptyCartException()))
@@ -84,9 +84,11 @@ public class OrderServiceImpl implements OrderService {
                             .map(cartItem -> new OrderItem(order, cartItem.getItem(), cartItem.getQuantity()))
                             .toList();
                     return orderItemRepository.saveAll(orderItems)
-                            .then(cartItemRepository.deleteAllById(cartItems.stream()
+                            .then(cartItemRepository.deletePurchasedItems(cartItems.stream()
                                     .map(CartItem::getItemId).toList()))
-                            .thenReturn(order.getId());
+                            .flatMap(deleted -> deleted == cartItems.size()
+                                    ? Mono.just(order.getId())
+                                    : Mono.error(new IllegalStateException("Cart cleanup did not delete all purchased items")));
                 });
     }
 }

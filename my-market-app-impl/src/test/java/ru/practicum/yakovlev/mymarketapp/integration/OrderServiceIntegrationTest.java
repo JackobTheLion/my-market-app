@@ -1,9 +1,15 @@
 package ru.practicum.yakovlev.mymarketapp.integration;
 
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import reactor.core.publisher.Signal;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
+import reactor.test.util.RaceTestUtils;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderItemDto;
@@ -19,6 +25,9 @@ import ru.practicum.yakovlev.mymarketapp.service.OrderService;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
@@ -36,6 +45,31 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
     private OrderRepository orders;
     @Autowired
     private OrderItemRepository positions;
+
+    @RepeatedTest(100)
+    void concurrentPurchasesCreateOnlyOneOrder() {
+        long itemId = items.save(item("Coffee", "12.50")).block().getId();
+        cart.updateItem(itemId, CartAction.PLUS).block();
+        Queue<Signal<Long>> results = new ConcurrentLinkedQueue<>();
+        Runnable checkout = () -> results.add(service.createOrder()
+                .materialize()
+                .block(Duration.ofSeconds(10)));
+        RaceTestUtils.race(15, Schedulers.boundedElastic(), checkout, checkout);
+
+        assertThat(results).hasSize(2);
+        assertThat(results)
+                .filteredOn(Signal::isOnNext)
+                .hasSize(1);
+        assertThat(results)
+                .filteredOn(Signal::isOnError)
+                .singleElement()
+                .satisfies(signal ->
+                        assertThat(signal.getThrowable()).isInstanceOf(EmptyCartException.class));
+
+        assertThat(orders.count().block()).isEqualTo(1L);
+        assertThat(positions.count().block()).isEqualTo(1L);
+        assertThat(cartItems.count().block()).isZero();
+    }
 
     @Test
     void purchaseCommitsPositionsAndClearsCart() {
@@ -135,8 +169,9 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
                 .verify();
     }
 
-    @Test
-    void cleanupFailureRollsBackOrderAndPositionsAndPreservesCart() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void cleanupFailureRollsBackOrderAndPositionsAndPreservesCart(boolean skipDelete) {
         long id = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
@@ -144,9 +179,9 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
                 .block();
         sql("""
                 CREATE FUNCTION reject_cart_delete() RETURNS trigger LANGUAGE plpgsql AS $$
-                BEGIN RAISE EXCEPTION 'simulated cart cleanup failure'; END;
+                BEGIN %s END;
                 $$
-                """)
+                """.formatted(skipDelete ? "RETURN NULL;" : "RAISE EXCEPTION 'simulated cart cleanup failure';"))
                 .block();
         try {
             sql("CREATE TRIGGER reject_cart_delete BEFORE DELETE ON cart_items FOR EACH ROW EXECUTE FUNCTION reject_cart_delete()")
@@ -154,8 +189,10 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
             StepVerifier.create(service.createOrder())
                     .expectErrorSatisfies(error ->
                             assertThat(error)
-                                    .isInstanceOf(DataAccessException.class)
-                                    .hasStackTraceContaining("simulated cart cleanup failure"))
+                                    .isInstanceOf(skipDelete ? IllegalStateException.class : DataAccessException.class)
+                                    .hasStackTraceContaining(skipDelete
+                                            ? "Cart cleanup did not delete all purchased items"
+                                            : "simulated cart cleanup failure"))
                     .verify();
             StepVerifier.create(orders.count())
                     .expectNext(0L)
