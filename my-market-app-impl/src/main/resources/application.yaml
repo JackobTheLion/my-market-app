@@ -4,15 +4,16 @@ server:
 spring:
   application:
     name: my-market-app
-  datasource:
-    url: ${DB_URL}
+  r2dbc:
+    url: ${R2DBC_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
-  jpa:
     properties:
-      hibernate:
-        default_schema: ${DB_SCHEMA:public}
+      schema: ${DB_SCHEMA:public}
   liquibase:
+    url: ${JDBC_URL}
+    user: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     change-log: classpath:db/changelog/db.changelog-master.xml
     default-schema: ${DB_SCHEMA:public}
     parameters:

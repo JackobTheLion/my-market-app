@@ -1,13 +1,14 @@
 package ru.practicum.yakovlev.mymarketapp.service;
 
+import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
 import ru.practicum.yakovlev.mymarketapp.dto.OrdersPageDto;
 
 public interface OrderService {
 
-    OrdersPageDto getOrders();
+    Mono<OrdersPageDto> getOrders();
 
-    OrderDto getOrder(long id);
+    Mono<OrderDto> getOrder(long id);
 
-    long createOrder();
+    Mono<Long> createOrder();
 }

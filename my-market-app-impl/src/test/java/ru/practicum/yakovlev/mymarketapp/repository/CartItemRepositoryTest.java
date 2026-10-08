@@ -1,59 +1,88 @@
 package ru.practicum.yakovlev.mymarketapp.repository;
 
-import org.hibernate.Hibernate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
-import ru.practicum.yakovlev.mymarketapp.model.CartItem;
+import reactor.test.StepVerifier;
 import ru.practicum.yakovlev.mymarketapp.model.Item;
-import ru.practicum.yakovlev.mymarketapp.support.JpaTestSupport;
-
-import java.util.List;
+import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
-class CartItemRepositoryTest extends JpaTestSupport {
+class CartItemRepositoryTest extends IntegrationTestSupport {
     @Autowired
-    private CartItemRepository repository;
-
+    private ItemRepository items;
     @Autowired
-    private TestEntityManager entityManager;
+    private CartItemRepository cart;
 
     @Test
-    void mapsPrimaryKeyToCatalogItemAndFetchesItemsInIdOrder() {
-        Item first = entityManager.persist(item("Coffee", "12.50"));
-        Item second = entityManager.persist(item("Tea", "3.25"));
-        entityManager.persist(new CartItem(second, 3));
-        entityManager.persist(new CartItem(first, 2));
-        entityManager.flush();
-        entityManager.clear();
-        List<CartItem> entries = repository.findAllByOrderByItemIdAsc();
-        assertThat(entries).extracting(CartItem::getItemId).containsExactly(first.getId(), second.getId());
-        assertThat(entries).extracting(CartItem::getQuantity).containsExactly(2, 3);
-        assertThat(entries).allSatisfy(entry -> assertThat(Hibernate.isInitialized(entry.getItem())).isTrue());
-        entityManager.clear();
-        assertThat(entries.getFirst().getItem().getTitle()).isEqualTo("Coffee");
+    void assignedItemIdUpsertInsertsAndThenIncrements() {
+        long id = items.save(item("Coffee", "12.50")).block().getId();
+        cart.increment(id)
+                .then(cart.increment(id))
+                .block();
+
+        StepVerifier.create(cart.findById(id))
+                .assertNext(entry -> {
+                    assertThat(entry.getItemId()).isEqualTo(id);
+                    assertThat(entry.getQuantity()).isEqualTo(2);
+                    assertThat(entry.getItem()).isNull();
+                })
+                .verifyComplete();
     }
 
     @Test
-    void dirtyCheckingPersistsQuantityWithoutSave() {
-        Item item = entityManager.persist(item("Coffee", "12.50"));
-        entityManager.persistAndFlush(new CartItem(item, 1));
-        entityManager.clear();
-        repository.findById(item.getId()).orElseThrow().increment();
-        entityManager.flush();
-        entityManager.clear();
-        assertThat(repository.findById(item.getId()).orElseThrow().getQuantity()).isEqualTo(2);
+    void minusSqlNeverCreatesZeroQuantity() {
+        long id = items.save(item("Coffee", "12.50")).block().getId();
+        cart.increment(id)
+                .then(cart.increment(id))
+                .block();
+        StepVerifier.create(cart.deleteLast(id))
+                .expectNext(0)
+                .verifyComplete();
+        StepVerifier.create(cart.decrement(id))
+                .expectNext(1)
+                .verifyComplete();
+        StepVerifier.create(cart.deleteLast(id))
+                .expectNext(1)
+                .verifyComplete();
+        StepVerifier.create(cart.findById(id))
+                .verifyComplete();
     }
 
     @Test
-    void deletingCatalogItemCascadesToCartInDatabase() {
-        Item item = entityManager.persist(item("Coffee", "12.50"));
-        entityManager.persistAndFlush(new CartItem(item, 1));
-        entityManager.getEntityManager().createNativeQuery("delete from items where id = :id")
-                .setParameter("id", item.getId()).executeUpdate();
-        entityManager.clear();
-        assertThat(repository.findById(item.getId())).isEmpty();
+    void joinLoadsAllItemFieldsAndQuantitiesInItemIdOrder() {
+        Item coffee = items.save(item("Coffee", "12.50")).block();
+        Item tea = item("Tea", "3.25");
+        tea.setDescription("Green tea");
+        tea.setImagePath(null);
+        Item savedTea = items.save(tea)
+                .block();
+        cart.increment(savedTea.getId())
+                .then(cart.increment(coffee.getId()))
+                .then(cart.increment(coffee.getId()))
+                .block();
+
+        StepVerifier.create(cart.findAllWithItems())
+                .assertNext(entry -> {
+                    assertThat(entry.getItemId()).isEqualTo(coffee.getId());
+                    assertThat(entry.getQuantity()).isEqualTo(2);
+                    assertThat(entry.getItem().getId()).isEqualTo(coffee.getId());
+                    assertThat(entry.getItem().getTitle()).isEqualTo("Coffee");
+                    assertThat(entry.getItem().getDescription()).isEqualTo("Description of Coffee");
+                    assertThat(entry.getItem().getImagePath()).isEqualTo("demo/photo.jpg");
+                    assertThat(entry.getItem().getPrice()).isEqualByComparingTo("12.50");
+                })
+                .assertNext(entry -> {
+                    assertThat(entry.getItemId()).isEqualTo(savedTea.getId());
+                    assertThat(entry.getQuantity()).isEqualTo(1);
+                    assertThat(entry.getItem().getId()).isEqualTo(savedTea.getId());
+                    assertThat(entry.getItem().getTitle()).isEqualTo("Tea");
+                    assertThat(entry.getItem().getDescription()).isEqualTo("Green tea");
+                    assertThat(entry.getItem().getImagePath()).isNull();
+                    assertThat(entry.getItem().getPrice()).isEqualByComparingTo("3.25");
+                })
+                .verifyComplete();
     }
+
 }

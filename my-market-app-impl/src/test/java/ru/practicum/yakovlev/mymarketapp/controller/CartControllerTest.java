@@ -3,93 +3,118 @@ package ru.practicum.yakovlev.mymarketapp.controller;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.web.servlet.MockMvc;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.web.reactive.function.BodyInserters;
+import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.dto.CartDto;
-import ru.practicum.yakovlev.mymarketapp.exception.NotFoundException;
-import ru.practicum.yakovlev.mymarketapp.service.CartService;
-import ru.practicum.yakovlev.mymarketapp.support.MvcTestSupport;
+import ru.practicum.yakovlev.mymarketapp.support.WebFluxTestSupport;
 
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.itemDto;
 
-class CartControllerTest extends MvcTestSupport {
-    @Autowired
-    private MockMvc mvc;
-
-    @Autowired
-    private CartService cartService;
-
+class CartControllerTest extends WebFluxTestSupport {
     @Test
-    void rendersCartItemsAndTotal() throws Exception {
-        CartDto cart = new CartDto(List.of(itemDto(1, 2)), new BigDecimal("25.00"));
-        when(cartService.getCart()).thenReturn(cart);
+    void emptyCartHidesPurchaseButton() {
+        when(cartService.getCart()).thenReturn(Mono.just(new CartDto(List.of(), BigDecimal.ZERO)));
 
-        mvc.perform(get("/cart/items"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("cart"))
-                .andExpect(model().attribute("items", cart.items()))
-                .andExpect(model().attribute("total", cart.total()));
-    }
-
-    @Test
-    void emptyCartHasNoBuyButton() throws Exception {
-        when(cartService.getCart()).thenReturn(new CartDto(List.of(), BigDecimal.ZERO));
-
-        mvc.perform(get("/cart/items"))
-                .andExpect(status().isOk());
+        client.get()
+                .uri("/cart/items")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody(String.class)
+                .value(html -> assertThat(html).doesNotContain("action=\"/buy\""));
     }
 
     @ParameterizedTest
-    @EnumSource(CartAction.class)
-    void changesCartAndRendersUpdatedContents(CartAction action) throws Exception {
-        CartDto cart = new CartDto(List.of(), BigDecimal.ZERO);
-        when(cartService.getCart()).thenReturn(cart);
-
-        mvc.perform(post("/cart/items")
-                        .param("id", "1")
-                        .param("action", action.name())
-                )
-                .andExpect(status().isOk())
-                .andExpect(view().name("cart"))
-                .andExpect(model().attribute("total", BigDecimal.ZERO));
-    }
-
-    @Test
-    void missingCatalogItemReturns404() throws Exception {
-        doThrow(new NotFoundException("missing")).when(cartService).updateItem(99, CartAction.PLUS);
-
-        mvc.perform(post("/cart/items")
-                        .param("id", "99")
-                        .param("action", "PLUS"))
-                .andExpect(status().isNotFound());
-
-        verify(cartService, never()).getCart();
-    }
-
-    @Test
-    void invalidIdReturns400BeforeServiceCall() throws Exception {
-        mvc.perform(post("/cart/items")
-                        .param("id", "0")
-                        .param("action", "PLUS"))
-                .andExpect(status().isBadRequest());
-
+    @ValueSource(strings = {"UNKNOWN", ""})
+    void invalidActionReturns400(String action) {
+        client.post()
+                .uri("/cart/items?id=1&action={action}", action)
+                .exchange()
+                .expectStatus()
+                .isBadRequest();
         verifyNoInteractions(cartService);
     }
 
     @Test
-    void missingIdReturns400() throws Exception {
-        mvc.perform(post("/cart/items")
-                        .param("action", "PLUS"))
-                .andExpect(status().isBadRequest());
+    void queryParametersDetermineActionWhenBodyContainsOtherValues() {
+        when(cartService.updateItem(1, CartAction.PLUS)).thenReturn(Mono.empty());
+        client.post()
+                .uri("/cart/items?id=1&action=PLUS")
+                .body(BodyInserters.fromFormData("id", "99")
+                        .with("action", "MINUS"))
+                .exchange()
+                .expectStatus()
+                .isSeeOther()
+                .expectHeader()
+                .location("/cart/items");
+        verify(cartService)
+                .updateItem(1, CartAction.PLUS);
+        verifyNoMoreInteractions(cartService);
+    }
 
+    @ParameterizedTest
+    @EnumSource(CartAction.class)
+    void successfulUpdateRedirectsToCart(CartAction action) {
+        when(cartService.updateItem(1, action)).thenReturn(Mono.empty());
+
+        client.post()
+                .uri("/cart/items?id=1&action={action}", action)
+                .exchange()
+                .expectStatus()
+                .isSeeOther()
+                .expectHeader()
+                .location("/cart/items");
+
+        verify(cartService).updateItem(1, action);
+        verifyNoMoreInteractions(cartService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0", "-1", "abc"})
+    void invalidIdReturns400(String id) {
+        client.post()
+                .uri("/cart/items?id={id}&action=PLUS", id)
+                .exchange()
+                .expectStatus()
+                .isBadRequest();
+        verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void missingIdReturns400() {
+        client.post()
+                .uri("/cart/items?action=PLUS")
+                .exchange()
+                .expectStatus()
+                .isBadRequest();
+        verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void missingActionReturns400() {
+        client.post()
+                .uri("/cart/items?id=1")
+                .exchange()
+                .expectStatus()
+                .isBadRequest();
+        verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void formBodyDoesNotReplaceRequiredQueryParameters() {
+        client.post()
+                .uri("/cart/items")
+                .body(BodyInserters.fromFormData("id", "1")
+                        .with("action", "PLUS"))
+                .exchange()
+                .expectStatus()
+                .isBadRequest();
         verifyNoInteractions(cartService);
     }
 }

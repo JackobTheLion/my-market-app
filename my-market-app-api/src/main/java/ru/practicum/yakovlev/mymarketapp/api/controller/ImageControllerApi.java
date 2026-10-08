@@ -1,5 +1,6 @@
 package ru.practicum.yakovlev.mymarketapp.api.controller;
 
+import reactor.core.publisher.Mono;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +12,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 public interface ImageControllerApi {
 
     @GetMapping("/{*filename}")
-    ResponseEntity<Resource> getImage(@PathVariable("filename") @NotBlank String filename);
+    Mono<ResponseEntity<Resource>> getImage(@PathVariable("filename") @NotBlank String filename);
 
 }

@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.PathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.practicum.yakovlev.mymarketapp.service.ImageService;
 
 import java.io.IOException;
@@ -24,7 +26,12 @@ public class ImageServiceImpl implements ImageService {
     }
 
     @Override
-    public Resource getImage(String filename) {
+    public Mono<Resource> getImage(String filename) {
+        return Mono.fromCallable(() -> resolveImage(filename))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Resource resolveImage(String filename) {
         if (filename == null || filename.isBlank() || filename.indexOf('\\') >= 0) {
             return defaultImage;
         }
