@@ -26,6 +26,6 @@ public class CartController implements CartControllerApi {
     @Override
     public Mono<String> updateItemInCart(long id, CartAction action, Model model) {
         return cartService.updateItem(id, action)
-                .then(getCart(model));
+                .thenReturn("redirect:/cart/items");
     }
 }

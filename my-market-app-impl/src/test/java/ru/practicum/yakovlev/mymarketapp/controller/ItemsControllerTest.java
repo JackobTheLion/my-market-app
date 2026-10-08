@@ -3,6 +3,7 @@ package ru.practicum.yakovlev.mymarketapp.controller;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -166,6 +167,24 @@ class ItemsControllerTest extends WebFluxTestSupport {
                 .expectStatus()
                 .isBadRequest();
         verifyNoInteractions(cartService, itemService);
+    }
+
+    @ParameterizedTest
+    @EnumSource(CartAction.class)
+    void successfulDetailUpdateRedirectsToItem(CartAction action) {
+        when(cartService.updateItem(42, action)).thenReturn(Mono.empty());
+
+        client.post()
+                .uri("/items/42?action={action}", action)
+                .exchange()
+                .expectStatus()
+                .isSeeOther()
+                .expectHeader()
+                .location("/items/42");
+
+        verify(cartService).updateItem(42, action);
+        verifyNoMoreInteractions(cartService);
+        verifyNoInteractions(itemService);
     }
 
     @ParameterizedTest

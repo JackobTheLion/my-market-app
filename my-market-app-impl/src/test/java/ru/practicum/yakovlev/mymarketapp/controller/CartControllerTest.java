@@ -2,6 +2,7 @@ package ru.practicum.yakovlev.mymarketapp.controller;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.web.reactive.function.BodyInserters;
 import reactor.core.publisher.Mono;
@@ -43,16 +44,35 @@ class CartControllerTest extends WebFluxTestSupport {
     @Test
     void queryParametersDetermineActionWhenBodyContainsOtherValues() {
         when(cartService.updateItem(1, CartAction.PLUS)).thenReturn(Mono.empty());
-        when(cartService.getCart()).thenReturn(Mono.just(new CartDto(List.of(), BigDecimal.ZERO)));
         client.post()
                 .uri("/cart/items?id=1&action=PLUS")
                 .body(BodyInserters.fromFormData("id", "99")
                         .with("action", "MINUS"))
                 .exchange()
                 .expectStatus()
-                .isOk();
+                .isSeeOther()
+                .expectHeader()
+                .location("/cart/items");
         verify(cartService)
                 .updateItem(1, CartAction.PLUS);
+        verifyNoMoreInteractions(cartService);
+    }
+
+    @ParameterizedTest
+    @EnumSource(CartAction.class)
+    void successfulUpdateRedirectsToCart(CartAction action) {
+        when(cartService.updateItem(1, action)).thenReturn(Mono.empty());
+
+        client.post()
+                .uri("/cart/items?id=1&action={action}", action)
+                .exchange()
+                .expectStatus()
+                .isSeeOther()
+                .expectHeader()
+                .location("/cart/items");
+
+        verify(cartService).updateItem(1, action);
+        verifyNoMoreInteractions(cartService);
     }
 
     @ParameterizedTest

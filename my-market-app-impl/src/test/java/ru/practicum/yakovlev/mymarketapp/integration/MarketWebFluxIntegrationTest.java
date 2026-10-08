@@ -86,6 +86,13 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .uri("/cart/items?id={id}&action=PLUS", id)
                 .exchange()
                 .expectStatus()
+                .isSeeOther()
+                .expectHeader()
+                .location("/cart/items");
+        client.get()
+                .uri("/cart/items")
+                .exchange()
+                .expectStatus()
                 .isOk()
                 .expectBody(String.class)
                 .value(html -> assertThat(html).contains("25.00"));
@@ -165,32 +172,43 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .findFirst()
                 .orElseThrow());
 
-        client.post()
-                .uri(minusUrl)
-                .exchange()
-                .expectStatus()
-                .isOk();
-        StepVerifier.create(cart.findById(id))
-                .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(1))
-                .verifyComplete();
-        client.post()
-                .uri(plusUrl)
-                .exchange()
-                .expectStatus()
-                .isOk();
-        StepVerifier.create(cart.findById(id))
-                .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(2))
-                .verifyComplete();
-        client.post()
-                .uri(deleteUrl)
-                .exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody(String.class)
-                .value(html -> assertThat(html).doesNotContain("Coffee", "action=\"/buy\""));
-        StepVerifier.create(cart.count())
-                .expectNext(0L)
-                .verifyComplete();
+        List<URI> actions = List.of(minusUrl, plusUrl, deleteUrl);
+        List<Integer> quantities = List.of(1, 2, 0);
+        for (int index = 0; index < actions.size(); index++) {
+            int quantity = quantities.get(index);
+            client.post()
+                    .uri(actions.get(index))
+                    .exchange()
+                    .expectStatus()
+                    .isSeeOther()
+                    .expectHeader()
+                    .location("/cart/items");
+
+            for (int load = 0; load < 2; load++) {
+                client.get()
+                        .uri("/cart/items")
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(String.class)
+                        .value(html -> {
+                            if (quantity == 0) {
+                                assertThat(html).doesNotContain("Coffee", "action=\"/buy\"");
+                            } else {
+                                assertThat(html).contains("Coffee", "<span>" + quantity + "</span>");
+                            }
+                        });
+                if (quantity == 0) {
+                    StepVerifier.create(cart.count())
+                            .expectNext(0L)
+                            .verifyComplete();
+                } else {
+                    StepVerifier.create(cart.findById(id))
+                            .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(quantity))
+                            .verifyComplete();
+                }
+            }
+        }
     }
 
     @Test
@@ -220,30 +238,32 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .findFirst()
                 .orElseThrow());
 
-        client.post()
-                .uri(plusUrl)
-                .exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody(String.class)
-                .value(html -> assertThat(html).contains("Coffee", "<span>1</span>"));
-        client.post()
-                .uri(plusUrl)
-                .exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody(String.class)
-                .value(html -> assertThat(html).contains("<span>2</span>"));
-        client.post()
-                .uri(minusUrl)
-                .exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody(String.class)
-                .value(html -> assertThat(html).contains("<span>1</span>"));
-        StepVerifier.create(cart.findById(id))
-                .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(1))
-                .verifyComplete();
+        List<URI> actions = List.of(plusUrl, plusUrl, minusUrl);
+        List<Integer> quantities = List.of(1, 2, 1);
+        for (int index = 0; index < actions.size(); index++) {
+            int quantity = quantities.get(index);
+            client.post()
+                    .uri(actions.get(index))
+                    .exchange()
+                    .expectStatus()
+                    .isSeeOther()
+                    .expectHeader()
+                    .location("/items/" + id);
+
+            // Follow the redirect, then refresh the resulting page.
+            for (int load = 0; load < 2; load++) {
+                client.get()
+                        .uri("/items/{id}", id)
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(String.class)
+                        .value(html -> assertThat(html).contains("Coffee", "<span>" + quantity + "</span>"));
+                StepVerifier.create(cart.findById(id))
+                        .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(quantity))
+                        .verifyComplete();
+            }
+        }
     }
 
     @Test

@@ -76,7 +76,7 @@ public class ItemsController implements ItemsControllerApi {
     @Override
     public Mono<String> updateItemInCart(long id, CartAction action, Model model) {
         return cartService.updateItem(id, action)
-                .then(getItem(id, model));
+                .thenReturn("redirect:/items/" + id);
     }
 
     private List<List<ItemDto>> prepareRows(List<ItemDto> items) {

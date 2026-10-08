@@ -1,5 +1,6 @@
 package ru.practicum.yakovlev.mymarketapp.service.impl;
 
+import org.apache.el.lang.ELArithmetic;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.PathResource;
 import org.springframework.core.io.Resource;
