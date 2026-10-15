@@ -31,8 +31,8 @@ class CartServiceImplTest {
     @Test
     void minusDeletesLastUnit() {
         Item coffee = item(1, "Coffee", "12.50");
-        when(itemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(coffee));
-        when(cartItemRepository.decrement(1L)).thenReturn(Mono.just(0));
+        when(itemRepository.findById(1L)).thenReturn(Mono.just(coffee));
+        when(cartItemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(new CartItem(coffee, 1)));
         when(cartItemRepository.deleteLast(1L)).thenReturn(Mono.just(1));
         StepVerifier.create(service.updateItem(1, CartAction.MINUS))
                 .verifyComplete();
@@ -44,7 +44,8 @@ class CartServiceImplTest {
     @Test
     void minusDecrementsLargerQuantity() {
         Item coffee = item(1, "Coffee", "12.50");
-        when(itemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(coffee));
+        when(itemRepository.findById(1L)).thenReturn(Mono.just(coffee));
+        when(cartItemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(new CartItem(coffee, 2)));
         when(cartItemRepository.decrement(1L)).thenReturn(Mono.just(1));
         StepVerifier.create(service.updateItem(1, CartAction.MINUS))
                 .verifyComplete();
@@ -55,16 +56,17 @@ class CartServiceImplTest {
 
     @Test
     void minusOnMissingPositionCompletes() {
-        when(itemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
-        when(cartItemRepository.decrement(1L)).thenReturn(Mono.just(0));
-        when(cartItemRepository.deleteLast(1L)).thenReturn(Mono.just(0));
+        when(itemRepository.findById(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
+        when(cartItemRepository.findByIdForUpdate(1L)).thenReturn(Mono.empty());
         StepVerifier.create(service.updateItem(1, CartAction.MINUS))
                 .verifyComplete();
+        verify(cartItemRepository, never()).decrement(anyLong());
+        verify(cartItemRepository, never()).deleteLast(anyLong());
     }
 
     @Test
     void deleteRemovesWholePosition() {
-        when(itemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
+        when(itemRepository.findById(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
         when(cartItemRepository.deleteById(1L)).thenReturn(Mono.empty());
         StepVerifier.create(service.updateItem(1, CartAction.DELETE))
                 .verifyComplete();

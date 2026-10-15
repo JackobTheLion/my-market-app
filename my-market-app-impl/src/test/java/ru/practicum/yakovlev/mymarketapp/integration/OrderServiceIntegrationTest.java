@@ -26,10 +26,13 @@ import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
 class OrderServiceIntegrationTest extends IntegrationTestSupport {
@@ -46,14 +49,19 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
     @Autowired
     private OrderItemRepository positions;
 
-    @RepeatedTest(100)
-    void concurrentPurchasesCreateOnlyOneOrder() {
-        long itemId = items.save(item("Coffee", "12.50")).block().getId();
-        cart.updateItem(itemId, CartAction.PLUS).block();
+    @RepeatedTest(value = 100, failureThreshold = 1)
+    void concurrentPurchasesOfTwoItemsCreateOnlyOneCompleteOrder() {
+        Duration timeout = Duration.ofSeconds(10);
+        long coffeeId = items.save(item("Coffee", "12.50")).block(timeout).getId();
+        long teaId = items.save(item("Tea", "3.25")).block(timeout).getId();
+        cart.updateItem(teaId, CartAction.PLUS)
+                .then(cart.updateItem(coffeeId, CartAction.PLUS))
+                .then(cart.updateItem(coffeeId, CartAction.PLUS))
+                .block(timeout);
         Queue<Signal<Long>> results = new ConcurrentLinkedQueue<>();
         Runnable checkout = () -> results.add(service.createOrder()
                 .materialize()
-                .block(Duration.ofSeconds(10)));
+                .block(timeout));
         RaceTestUtils.race(15, Schedulers.boundedElastic(), checkout, checkout);
 
         assertThat(results).hasSize(2);
@@ -66,9 +74,90 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
                 .satisfies(signal ->
                         assertThat(signal.getThrowable()).isInstanceOf(EmptyCartException.class));
 
-        assertThat(orders.count().block()).isEqualTo(1L);
-        assertThat(positions.count().block()).isEqualTo(1L);
-        assertThat(cartItems.count().block()).isZero();
+        long orderId = results.stream().filter(Signal::isOnNext).findFirst().orElseThrow().get();
+        OrderDto order = service.getOrder(orderId).block(timeout);
+        assertThat(order.items())
+                .extracting(OrderItemDto::id, OrderItemDto::count)
+                .containsExactly(tuple(coffeeId, 2), tuple(teaId, 1));
+        assertThat(order.totalSum()).isEqualByComparingTo("28.25");
+        assertThat(orders.count().block(timeout)).isEqualTo(1L);
+        assertThat(positions.count().block(timeout)).isEqualTo(2L);
+        assertThat(cartItems.count().block(timeout)).isZero();
+    }
+
+    @RepeatedTest(value = 100, failureThreshold = 1)
+    void concurrentCartIncrementAndPurchasePreserveQuantity() {
+        assertConcurrentQuantityUpdateAndPurchase(CartAction.PLUS, false);
+    }
+
+    @RepeatedTest(value = 100, failureThreshold = 1)
+    void concurrentCartIncrementAndPurchaseOfTwoItemsPreserveQuantity() {
+        assertConcurrentQuantityUpdateAndPurchase(CartAction.PLUS, true);
+    }
+
+    @RepeatedTest(value = 100, failureThreshold = 1)
+    void concurrentCartDecrementAndPurchaseOfTwoItemsPreserveQuantity() {
+        assertConcurrentQuantityUpdateAndPurchase(CartAction.MINUS, true);
+    }
+
+    private void assertConcurrentQuantityUpdateAndPurchase(CartAction action, boolean twoItems) {
+        Duration timeout = Duration.ofSeconds(10);
+        long coffeeId = items.save(item("Coffee", "12.50")).block(timeout).getId();
+        Long teaId = twoItems ? items.save(item("Tea", "3.25")).block(timeout).getId() : null;
+        if (twoItems) {
+            cart.updateItem(teaId, CartAction.PLUS).block(timeout);
+        }
+        cart.updateItem(coffeeId, CartAction.PLUS).block(timeout);
+        if (action == CartAction.MINUS) {
+            cart.updateItem(coffeeId, CartAction.PLUS).block(timeout);
+        }
+        AtomicReference<Long> orderId = new AtomicReference<>();
+
+        RaceTestUtils.race(15, Schedulers.boundedElastic(),
+                () -> cart.updateItem(coffeeId, action).block(timeout),
+                () -> orderId.set(service.createOrder().block(timeout)));
+
+        OrderDto order = service.getOrder(orderId.get()).block(timeout);
+        assertThat(order.items()).extracting(OrderItemDto::id)
+                .containsExactlyElementsOf(twoItems ? List.of(coffeeId, teaId) : List.of(coffeeId));
+        int purchasedQuantity = order.items().getFirst().count();
+        assertThat(purchasedQuantity).isIn(1, 2);
+        int remainingQuantity = action == CartAction.PLUS ? 2 - purchasedQuantity : 0;
+        assertThat(cartItems.findById(coffeeId).map(entry -> entry.getQuantity())
+                .defaultIfEmpty(0).block(timeout)).isEqualTo(remainingQuantity);
+        assertThat(cartItems.count().block(timeout)).isEqualTo(remainingQuantity > 0 ? 1L : 0L);
+        if (twoItems) {
+            assertThat(order.items().get(1).count()).isEqualTo(1);
+        }
+        BigDecimal expectedTotal = new BigDecimal("12.50").multiply(BigDecimal.valueOf(purchasedQuantity))
+                .add(twoItems ? new BigDecimal("3.25") : BigDecimal.ZERO);
+        assertThat(order.totalSum()).isEqualByComparingTo(expectedTotal);
+        assertThat(orders.count().block(timeout)).isEqualTo(1L);
+        assertThat(positions.count().block(timeout)).isEqualTo(twoItems ? 2L : 1L);
+    }
+
+    @RepeatedTest(value = 100, failureThreshold = 1)
+    void concurrentCartDeletionAndPurchaseOfTwoItemsPreserveOtherItem() {
+        Duration timeout = Duration.ofSeconds(10);
+        long coffeeId = items.save(item("Coffee", "12.50")).block(timeout).getId();
+        long teaId = items.save(item("Tea", "3.25")).block(timeout).getId();
+        cart.updateItem(teaId, CartAction.PLUS)
+                .then(cart.updateItem(coffeeId, CartAction.PLUS))
+                .block(timeout);
+        AtomicReference<Long> orderId = new AtomicReference<>();
+
+        RaceTestUtils.race(15, Schedulers.boundedElastic(),
+                () -> cart.updateItem(coffeeId, CartAction.DELETE).block(timeout),
+                () -> orderId.set(service.createOrder().block(timeout)));
+
+        OrderDto order = service.getOrder(orderId.get()).block(timeout);
+        assertThat(order.items()).extracting(OrderItemDto::id)
+                .isIn(List.of(teaId), List.of(coffeeId, teaId));
+        assertThat(order.items()).extracting(OrderItemDto::count).containsOnly(1);
+        assertThat(order.totalSum()).isEqualByComparingTo(order.items().size() == 2 ? "15.75" : "3.25");
+        assertThat(orders.count().block(timeout)).isEqualTo(1L);
+        assertThat(positions.count().block(timeout)).isEqualTo((long) order.items().size());
+        assertThat(cartItems.count().block(timeout)).isZero();
     }
 
     @Test

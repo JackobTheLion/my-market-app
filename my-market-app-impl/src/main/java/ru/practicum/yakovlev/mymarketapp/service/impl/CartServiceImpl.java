@@ -44,10 +44,10 @@ public class CartServiceImpl implements CartService {
     }
 
     private Mono<Void> reduceOrDeleteItem(long itemId) {
-        return cartItemRepository.decrement(itemId)
-                .flatMap(updated -> updated == 0
-                        ? cartItemRepository.deleteLast(itemId)
-                        : Mono.just(updated))
+        return cartItemRepository.findByIdForUpdate(itemId)
+                .flatMap(entry -> entry.getQuantity() > 1
+                        ? cartItemRepository.decrement(itemId)
+                        : cartItemRepository.deleteLast(itemId))
                 .then();
     }
 
@@ -56,7 +56,7 @@ public class CartServiceImpl implements CartService {
     }
 
     private Mono<Item> findItemOrThrow(Long itemId) {
-        return itemRepository.findByIdForUpdate(itemId)
+        return itemRepository.findById(itemId)
                 .switchIfEmpty(Mono.error(new NotFoundException("Item not found: " + itemId)));
     }
 }

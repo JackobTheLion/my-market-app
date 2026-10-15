@@ -1,9 +1,12 @@
 package ru.practicum.yakovlev.mymarketapp.integration;
 
+import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.RepeatedTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import reactor.test.util.RaceTestUtils;
@@ -30,6 +33,35 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
     private CartItemRepository cart;
     @Autowired
     private CartService service;
+    @Autowired
+    private ConnectionFactory connectionFactory;
+
+    @Test
+    void cartUpdatesCompleteWhileItemHasNoKeyUpdateLock() {
+        Duration timeout = Duration.ofSeconds(10);
+        long id = items.save(item("Coffee", "12.50")).block(timeout).getId();
+        Connection connection = Mono.from(connectionFactory.create()).block(timeout);
+        try {
+            Mono.from(connection.beginTransaction()).block(timeout);
+            Mono.from(connection.createStatement("SELECT id FROM items WHERE id = $1 FOR NO KEY UPDATE")
+                            .bind(0, id).execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("id", Long.class)))
+                    .single()
+                    .block(timeout);
+
+            service.updateItem(id, CartAction.PLUS)
+                    .then(service.updateItem(id, CartAction.PLUS))
+                    .then(service.updateItem(id, CartAction.MINUS))
+                    .block(timeout);
+            assertThat(cart.findById(id).block(timeout).getQuantity()).isEqualTo(1);
+            service.updateItem(id, CartAction.DELETE).block(timeout);
+            assertThat(cart.count().block(timeout)).isZero();
+        } finally {
+            Mono.from(connection.rollbackTransaction())
+                    .then(Mono.from(connection.close()))
+                    .block(timeout);
+        }
+    }
 
     @RepeatedTest(100)
     void concurrentPlusesCreatePositionWithoutLosingUnits() {

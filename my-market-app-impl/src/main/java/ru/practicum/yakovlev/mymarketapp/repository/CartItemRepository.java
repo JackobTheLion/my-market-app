@@ -10,6 +10,9 @@ import java.util.List;
 
 public interface CartItemRepository extends ReactiveCrudRepository<CartItem, Long>, CartItemRepositoryCustom {
 
+    @Query("SELECT * FROM cart_items WHERE item_id = :itemId FOR UPDATE")
+    Mono<CartItem> findByIdForUpdate(long itemId);
+
     @Modifying
     @Query("DELETE FROM cart_items WHERE item_id IN (:itemIds)")
     Mono<Integer> deletePurchasedItems(List<Long> itemIds);
