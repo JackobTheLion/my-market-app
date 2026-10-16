@@ -1,12 +1,14 @@
 spring:
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: validate
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/market_test
+    username: market_test
+    password: market_test
     properties:
-      hibernate:
-        default_schema: public
+      schema: public
   liquibase:
+    url: jdbc:postgresql://localhost:5432/market_test
+    user: market_test
+    password: market_test
     default-schema: public
     parameters:
       appSchema: public
@@ -19,7 +21,3 @@ application:
   database:
     demo:
       insert-demo-data: false
-
-logging:
-  level:
-    org.springframework.test.context.cache: DEBUG

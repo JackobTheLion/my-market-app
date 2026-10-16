@@ -1,48 +1,38 @@
 package ru.practicum.yakovlev.mymarketapp.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
 import lombok.AccessLevel;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
-@Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "order_items")
+@Table("order_items")
 public class OrderItem {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id")
-    private Order order;
+    @Column("order_id")
+    private Long orderId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "item_id")
-    private Item item;
+    @Column("item_id")
+    private Long itemId;
 
-    @Column(name = "title")
+    @Column("title")
     private String title;
 
-    @Column(name = "price")
+    @Column("price")
     private BigDecimal price;
 
-    @Column(name = "image_path")
+    @Column("image_path")
     private String imagePath;
 
-    @Column(name = "quantity")
+    @Column("quantity")
     private int quantity;
 
     public OrderItem(Order order, Item item, int quantity) {
@@ -52,8 +42,8 @@ public class OrderItem {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero");
         }
-        this.order = order;
-        this.item = item;
+        this.orderId = order.getId();
+        this.itemId = item.getId();
         this.title = item.getTitle();
         this.price = item.getPrice();
         this.imagePath = item.getImagePath();

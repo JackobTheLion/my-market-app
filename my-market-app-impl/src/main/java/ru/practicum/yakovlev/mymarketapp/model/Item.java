@@ -1,11 +1,8 @@
 package ru.practicum.yakovlev.mymarketapp.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import lombok.Getter;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -15,25 +12,23 @@ import java.math.BigDecimal;
 
 @Getter
 @Setter
-@Entity
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "items")
+@Table("items")
 public class Item {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "title")
+    @Column("title")
     private String title;
 
-    @Column(name = "description")
+    @Column("description")
     private String description;
 
-    @Column(name = "image_path")
+    @Column("image_path")
     private String imagePath;
 
-    @Column(name = "price")
+    @Column("price")
     private BigDecimal price;
 
     public Item(String title, String description, String imagePath, BigDecimal price) {

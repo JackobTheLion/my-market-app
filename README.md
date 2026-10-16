@@ -1,6 +1,6 @@
 # My Market App
 
-Веб-приложение интернет-магазина. Пользователь просматривает каталог, ищет товары, добавляет их в корзину и оформляет заказы. Страницы формируются на сервере с помощью Spring MVC и Thymeleaf; данные хранятся в PostgreSQL.
+Веб-приложение интернет-магазина. Пользователь просматривает каталог, ищет товары, добавляет их в корзину и оформляет заказы. Страницы формируются на сервере с помощью Spring WebFlux и Thymeleaf; данные хранятся в PostgreSQL.
 
 ## Возможности
 
@@ -20,12 +20,12 @@
 | Компонент | Технология |
 |---|---|
 | Язык | Java 21 |
-| Приложение | Spring Boot 3.5.16, Spring MVC |
+| Приложение | Spring Boot 3.5.16, Spring WebFlux |
 | Интерфейс | Thymeleaf, Bootstrap, Bootstrap Icons |
-| Работа с данными | Spring Data JPA / Hibernate, PostgreSQL 16 |
+| Работа с данными | Spring Data R2DBC, r2dbc-postgresql, PostgreSQL 16 |
 | Миграции | Liquibase |
 | Сборка | Maven Wrapper, Maven 3.9.16 |
-| Тестирование | JUnit 5, Mockito, MockMvc, Testcontainers |
+| Тестирование | JUnit 5, Mockito, WebTestClient, StepVerifier, Testcontainers |
 | Контейнеризация | Docker |
 
 ## Структура проекта
@@ -33,7 +33,7 @@
 ```text
 my-market-app/
 ├── my-market-app-bom/       # Управление версиями зависимостей
-├── my-market-app-api/       # Интерфейсы MVC-контроллеров, маршруты и перечисления
+├── my-market-app-api/       # Контракты WebFlux-контроллеров, формы и перечисления
 ├── my-market-app-impl/      # Реализация приложения
 ├── images/                  # Изображения демо товаров и default-image.svg
 ├── Dockerfile               # Multi-stage сборка и образ приложения с Java 21 JRE
@@ -49,9 +49,10 @@ my-market-app/
 
 | Переменная | Значение по умолчанию | Назначение |
 |---|---|---|
-| `DB_URL` | Нет, обязательна | JDBC-адрес PostgreSQL |
-| `DB_USERNAME` | Нет, обязательна | Пользователь БД |
-| `DB_PASSWORD` | Нет, обязательна | Пароль БД |
+| `R2DBC_URL` | `r2dbc:postgresql://localhost:5432/my_market_app` | Реактивное подключение к PostgreSQL |
+| `JDBC_URL` | `jdbc:postgresql://localhost:5432/my_market_app` | JDBC-подключение только для миграций Liquibase |
+| `DB_USERNAME` | `market` | Пользователь БД |
+| `DB_PASSWORD` | `market` | Пароль БД |
 | `DB_SCHEMA` | `public` | Схема таблиц приложения и миграций Liquibase |
 | `SERVER_PORT` | `8080` | HTTP-порт приложения |
 | `IMAGES_ROOT` | `images` | Каталог изображений |
@@ -115,4 +116,6 @@ Liquibase запускается автоматически при старте 
 
 Требуются JDK 21 и работающий Docker. Testcontainers автоматически запускает `postgres:16-alpine`; отдельная тестовая БД не нужна. Профиль `test` отключает демо-данные, применяет миграции Liquibase и включает проверку схемы Hibernate (`ddl-auto: validate`).
 
-Тесты проверяют бизнес-логику сервисов, MVC-маршруты, работу репозиториев и сценарий «каталог → корзина → покупка → история заказов». Интеграционные проверки включают откат транзакции при ошибке оформления заказа. Отчёты Maven Surefire находятся в `my-market-app-impl/target/surefire-reports/`.
+Для полного набора требуются JDK 21 и работающий Docker. Testcontainers автоматически запускает `postgres:16-alpine`; отдельная тестовая БД не нужна. Профиль `test` отключает демо-данные и применяет существующие миграции Liquibase. `@ServiceConnection` автоматически настраивает JDBC для миграций и R2DBC для тестовых запросов.
+
+Тесты проверяют бизнес-логику сервисов, WebFlux-маршруты, работу репозиториев и сценарий «каталог → корзина → покупка → история заказов». Интеграционные проверки выполняются через настоящий HTTP-сервер Reactor Netty и включают откат транзакции при ошибке сохранения позиций или очистки корзины и параллельное добавление товаров.   

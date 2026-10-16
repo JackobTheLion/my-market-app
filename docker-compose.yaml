@@ -4,7 +4,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DB_URL: jdbc:postgresql://db:5432/my_market_app
+      R2DBC_URL: r2dbc:postgresql://db:5432/my_market_app
+      JDBC_URL: jdbc:postgresql://db:5432/my_market_app
       DB_USERNAME: market
       DB_PASSWORD: market
       DB_SCHEMA: public
@@ -13,7 +14,8 @@ services:
     volumes:
       - ./images:/app/images
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:16
@@ -21,6 +23,12 @@ services:
       POSTGRES_DB: my_market_app
       POSTGRES_USER: market
       POSTGRES_PASSWORD: market
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     volumes:
       - postgres-data:/var/lib/postgresql/data
 

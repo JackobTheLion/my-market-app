@@ -7,16 +7,17 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 
 @RequestMapping(ApiConstants.CART_PATH)
 public interface CartControllerApi {
 
     @GetMapping("/items")
-    String getCart(Model model);
+    Mono<String> getCart(Model model);
 
     @PostMapping("/items")
-    String updateItemInCart(
+    Mono<String> updateItemInCart(
             @RequestParam("id") @Positive long id,
             @RequestParam("action") @NotNull CartAction action,
             Model model

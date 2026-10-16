@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.api.enums.ItemSort;
 
@@ -17,7 +17,7 @@ import ru.practicum.yakovlev.mymarketapp.api.enums.ItemSort;
 public interface ItemsControllerApi {
 
     @GetMapping
-    String getItems(
+    Mono<String> getItems(
             @RequestParam(name = "search", required = false) String search,
             @RequestParam(name = "sort", required = false, defaultValue = "NO") @NotNull ItemSort sort,
             @RequestParam(name = "pageNumber", required = false, defaultValue = "1") @Positive int pageNumber,
@@ -26,21 +26,21 @@ public interface ItemsControllerApi {
     );
 
     @PostMapping
-    String updateItemInCart(
+    Mono<String> updateItemInCart(
             @RequestParam("id") @Positive long id,
             @RequestParam(name = "search", required = false) String search,
-            @RequestParam(name = "sort", required = false, defaultValue = "NO") @NotNull ItemSort sort,
+            @RequestParam(name = "sort", required = false, defaultValue = "NO") ItemSort sort,
             @RequestParam(name = "pageNumber", required = false, defaultValue = "1") @Positive int pageNumber,
             @RequestParam(name = "pageSize", required = false, defaultValue = "10") @Positive @Max(100) int pageSize,
             @RequestParam("action") @NotNull CartAction action,
-            RedirectAttributes redirectAttributes
+            Model model
     );
 
     @GetMapping("/{id}")
-    String getItem(@PathVariable("id") @Positive long id, Model model);
+    Mono<String> getItem(@PathVariable("id") @Positive long id, Model model);
 
     @PostMapping("/{id}")
-    String updateItemInCart(
+    Mono<String> updateItemInCart(
             @PathVariable("id") @Positive long id,
             @RequestParam("action") @NotNull CartAction action,
             Model model

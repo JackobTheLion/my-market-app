@@ -3,12 +3,11 @@ package ru.practicum.yakovlev.mymarketapp.controller;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.api.controller.ItemsControllerApi;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.api.enums.ItemSort;
 import ru.practicum.yakovlev.mymarketapp.dto.ItemDto;
-import ru.practicum.yakovlev.mymarketapp.dto.ItemPageDto;
 import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.service.ItemService;
 
@@ -25,54 +24,59 @@ public class ItemsController implements ItemsControllerApi {
     private final CartService cartService;
 
     @Override
-    public String getItems(
+    public Mono<String> getItems(
             String search,
             ItemSort sort,
             int pageNumber,
             int pageSize,
             Model model
     ) {
-        ItemPageDto page = itemService.getItems(search, sort, pageNumber, pageSize);
-
-        model.addAttribute("items", prepareRows(page.items()));
-        model.addAttribute("search", search);
-        model.addAttribute("sort", sort.name());
-        model.addAttribute("paging", page.paging());
-        return "items";
+        return itemService.getItems(search, sort, pageNumber, pageSize)
+                .map(page -> {
+                    model.addAttribute("items", prepareRows(page.items()));
+                    model.addAttribute("search", search);
+                    model.addAttribute("sort", sort.name());
+                    model.addAttribute("paging", page.paging());
+                    return "items";
+                });
     }
 
     @Override
-    public String updateItemInCart(
+    public Mono<String> updateItemInCart(
             long id,
             String search,
             ItemSort sort,
             int pageNumber,
             int pageSize,
             CartAction action,
-            RedirectAttributes redirectAttributes
+            Model model
     ) {
-        cartService.updateItem(id, action);
-
+        String redirect = "redirect:/items?";
         if (search != null) {
-            redirectAttributes.addAttribute("search", search);
+            model.addAttribute("search", search);
+            redirect += "search={search}&";
         }
-        redirectAttributes.addAttribute("sort", sort);
-        redirectAttributes.addAttribute("pageNumber", pageNumber);
-        redirectAttributes.addAttribute("pageSize", pageSize);
+        model.addAttribute("sort", sort);
+        model.addAttribute("pageNumber", pageNumber);
+        model.addAttribute("pageSize", pageSize);
 
-        return "redirect:/items";
+        return cartService.updateItem(id, action)
+                .thenReturn(redirect + "sort={sort}&pageNumber={pageNumber}&pageSize={pageSize}");
     }
 
     @Override
-    public String getItem(long id, Model model) {
-        model.addAttribute("item", itemService.getItem(id));
-        return "item";
+    public Mono<String> getItem(long id, Model model) {
+        return itemService.getItem(id)
+                .map(item -> {
+                    model.addAttribute("item", item);
+                    return "item";
+                });
     }
 
     @Override
-    public String updateItemInCart(long id, CartAction action, Model model) {
-        cartService.updateItem(id, action);
-        return getItem(id, model);
+    public Mono<String> updateItemInCart(long id, CartAction action, Model model) {
+        return cartService.updateItem(id, action)
+                .thenReturn("redirect:/items/" + id);
     }
 
     private List<List<ItemDto>> prepareRows(List<ItemDto> items) {

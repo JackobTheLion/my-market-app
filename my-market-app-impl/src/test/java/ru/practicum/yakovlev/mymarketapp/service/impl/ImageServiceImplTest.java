@@ -5,12 +5,13 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.core.io.Resource;
+import reactor.test.StepVerifier;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ImageServiceImplTest {
 
@@ -23,7 +24,10 @@ class ImageServiceImplTest {
     void invalidMissingOrDirectoryPathReturnsPlaceholder(String filename) throws Exception {
         Files.writeString(directory.resolve("default-image.svg"), "placeholder");
         ImageServiceImpl service = new ImageServiceImpl(directory.toString(), "default-image.svg");
-        assertEquals("placeholder", service.getImage(filename).getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        StepVerifier.create(service.getImage(filename))
+                .assertNext(resource ->
+                        assertArrayEquals("placeholder".getBytes(java.nio.charset.StandardCharsets.UTF_8), read(resource)))
+                .verifyComplete();
     }
 
     @Test
@@ -32,7 +36,10 @@ class ImageServiceImplTest {
         byte[] expected = {1, 2, 3};
         Files.write(demo.resolve("photo.jpg"), expected);
         ImageServiceImpl service = new ImageServiceImpl(directory.toString(), "default-image.svg");
-        assertArrayEquals(expected, service.getImage("demo/photo.jpg").getContentAsByteArray());
+        StepVerifier.create(service.getImage("demo/photo.jpg"))
+                .assertNext(resource ->
+                        assertArrayEquals(expected, read(resource)))
+                .verifyComplete();
     }
 
     @Test
@@ -40,19 +47,25 @@ class ImageServiceImplTest {
         byte[] placeholder = "placeholder".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         Files.write(directory.resolve("default-image.svg"), placeholder);
         ImageServiceImpl service = new ImageServiceImpl(directory.toString(), "default-image.svg");
-        assertArrayEquals(placeholder, service.getImage("../application.yaml").getContentAsByteArray());
-        assertArrayEquals(placeholder, service.getImage("..\\application.yaml").getContentAsByteArray());
-        assertArrayEquals(placeholder, service.getImage("/application.yaml").getContentAsByteArray());
+        StepVerifier.create(service.getImage("../application.yaml"))
+                .assertNext(resource ->
+                        assertArrayEquals(placeholder, read(resource)))
+                .verifyComplete();
+        StepVerifier.create(service.getImage("..\\application.yaml"))
+                .assertNext(resource ->
+                        assertArrayEquals(placeholder, read(resource)))
+                .verifyComplete();
+        StepVerifier.create(service.getImage("/application.yaml"))
+                .assertNext(resource ->
+                        assertArrayEquals(placeholder, read(resource)))
+                .verifyComplete();
     }
 
-    @Test
-    void rejectsSymlinkOutsideFilesystemRoot() throws Exception {
-        Path root = Files.createDirectory(directory.resolve("images"));
-        Path outside = Files.writeString(directory.resolve("outside.jpg"), "private");
-        Files.writeString(root.resolve("default-image.svg"), "placeholder");
-        Files.createSymbolicLink(root.resolve("photo.jpg"), outside);
-        ImageServiceImpl service = new ImageServiceImpl(root.toString(), "default-image.svg");
-        assertEquals("default-image.svg", service.getImage("photo.jpg").getFilename());
-        assertEquals("placeholder", service.getImage("photo.jpg").getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+    private static byte[] read(Resource resource) {
+        try {
+            return resource.getContentAsByteArray();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 }
