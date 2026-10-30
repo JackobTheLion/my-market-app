@@ -1,0 +1,76 @@
+openapi: 3.0.3
+info:
+  title: Market payment service
+  version: 1.0.0
+  description: Single shared account. Amounts and balance are expressed in RUB.
+paths:
+  /api/balance:
+    get:
+      tags: [Payments]
+      operationId: getBalance
+      responses:
+        '200':
+          description: Current account balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+  /api/payments:
+    post:
+      tags: [Payments]
+      operationId: makePayment
+      description: Each successful request debits the account by the specified amount.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Payment succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentError'
+        '409':
+          description: Insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentError'
+components:
+  schemas:
+    BalanceResponse:
+      type: object
+      required: [balance]
+      properties:
+        balance:
+          type: number
+          minimum: 0
+    PaymentRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: number
+          description: Amount in RUB with at most 17 integral and 2 fractional digits, including trailing zeros.
+          minimum: 0.01
+          maximum: 99999999999999999.99
+          multipleOf: 0.01
+          # The generator does not derive a Bean Validation precision constraint from multipleOf.
+          x-field-extra-annotation: '@jakarta.validation.constraints.Digits(integer = 17, fraction = 2)'
+    PaymentError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Добавить товар — Витрина магазина</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+</head>
+<body class="bg-light">
+<main class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <a href="/items" class="link-secondary">&larr; Вернуться к каталогу</a>
+            <div class="card shadow-sm mt-3">
+                <div class="card-body p-4">
+                    <h1 class="h3 mb-4">Добавить товар</h1>
+                    <div th:if="${uploadError}" class="alert alert-danger" role="alert" th:text="${uploadError}"></div>
+                    <form method="post" th:action="@{/items/new}" enctype="multipart/form-data" th:object="${itemForm}">
+                        <div th:if="${#fields.hasGlobalErrors()}" class="alert alert-danger" role="alert">
+                            <p class="mb-0" th:each="error : ${#fields.globalErrors()}" th:text="${error}"></p>
+                        </div>
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Название</label>
+                            <input id="title" type="text" class="form-control" th:field="*{title}" required maxlength="255"
+                                   th:errorclass="is-invalid" aria-describedby="titleError">
+                            <div id="titleError" class="invalid-feedback" th:errors="*{title}"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Описание</label>
+                            <textarea id="description" class="form-control" th:field="*{description}" rows="4"
+                                      th:errorclass="is-invalid" aria-describedby="descriptionError"></textarea>
+                            <div id="descriptionError" class="invalid-feedback" th:errors="*{description}"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="price" class="form-label">Цена, руб.</label>
+                            <input id="price" type="number" class="form-control" th:field="*{price}" min="0.01" step="0.01" required
+                                   th:errorclass="is-invalid" aria-describedby="priceError">
+                            <div id="priceError" class="invalid-feedback" th:if="${#fields.hasErrors('price')}">
+                                Укажите положительную цену: до 17 цифр до запятой и не более 2 после.
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label for="image" class="form-label">Изображение</label>
+                            <input id="image" name="image" type="file" class="form-control" accept="image/png,image/jpeg" required
+                                   th:classappend="${#fields.hasErrors('image')} ? 'is-invalid'" aria-describedby="imageHelp imageError">
+                            <div id="imageHelp" class="form-text">PNG или JPEG, не более 5 МиБ. При повторной отправке выберите файл заново.</div>
+                            <div id="imageError" class="invalid-feedback" th:errors="*{image}"></div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success">Добавить товар</button>
+                            <a href="/items" class="btn btn-outline-secondary">Отмена</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+</body>
+</html>

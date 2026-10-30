@@ -1,0 +1,10 @@
+.git
+.idea
+.codex
+.agents
+**/target
+**/*.iml
+local.env
+.env
+.env.*
+images

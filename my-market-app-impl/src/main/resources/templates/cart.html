@@ -46,10 +46,15 @@
         </div>
         <div class="row p-2">
             <div class="col">
+                <div class="alert alert-warning" th:if="${paymentMessage != null}" th:text="${paymentMessage}"></div>
+                <div class="alert alert-danger" th:if="${!#lists.isEmpty(param.paymentError)}">
+                    Заказ не оформлен. Не удалось подтвердить оплату. Проверьте баланс и попробуйте позже.
+                </div>
+                <p th:if="${balance != null}" th:text="'Баланс: ' + ${balance} + ' руб.'"></p>
                 <form action="/buy" method="post" th:if="${!items.isEmpty()}">
                     <div class="hstack gap-3">
                         <h2 th:text="'Итого: '+${total}+' руб.'"/>
-                        <button class="btn btn-warning ms-auto">Купить</button>
+                        <button class="btn btn-warning ms-auto" th:disabled="${!canBuy}">Купить</button>
                     </div>
                 </form>
             </div>

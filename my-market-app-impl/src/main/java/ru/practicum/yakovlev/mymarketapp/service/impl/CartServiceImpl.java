@@ -6,12 +6,16 @@ import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.dto.CartDto;
+import ru.practicum.yakovlev.mymarketapp.model.CartItem;
 import ru.practicum.yakovlev.mymarketapp.exception.NotFoundException;
 import ru.practicum.yakovlev.mymarketapp.mapper.CartMapper;
 import ru.practicum.yakovlev.mymarketapp.model.Item;
 import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.ItemRepository;
 import ru.practicum.yakovlev.mymarketapp.service.CartService;
+import ru.practicum.yakovlev.mymarketapp.service.ItemService;
+
+import java.util.Comparator;
 
 @Service
 @RequiredArgsConstructor
@@ -19,11 +23,17 @@ public class CartServiceImpl implements CartService {
     private final ItemRepository itemRepository;
     private final CartItemRepository cartItemRepository;
     private final CartMapper cartMapper;
+    private final ItemService itemService;
 
     @Override
     public Mono<CartDto> getCart() {
-        return cartItemRepository.findAllWithItems()
+        return cartItemRepository.findAll()
+                .sort(Comparator.comparing(CartItem::getItemId))
                 .collectList()
+                .flatMap(entries -> itemService.getItemsByIds(entries.stream().map(CartItem::getItemId).toList())
+                        .map(products -> entries.stream()
+                                .map(entry -> new CartItem(products.get(entry.getItemId()), entry.getQuantity()))
+                                .toList()))
                 .map(cartMapper::toDto);
     }
 

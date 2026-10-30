@@ -31,6 +31,13 @@ import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.itemDto;
 
 class ItemsControllerTest extends WebFluxTestSupport {
     @Test
+    void creationPageIsNotTreatedAsProductId() {
+        client.get().uri("/items/new").exchange().expectStatus().isOk()
+                .expectBody(String.class).value(html -> assertThat(html).contains("Добавить товар", "multipart/form-data"));
+        verifyNoInteractions(itemService);
+    }
+
+    @Test
     void rendersCatalog() {
         when(itemService.getItems(null, ItemSort.NO, 1, 20)).thenReturn(Mono.just(new ItemPageDto(List.of(itemDto(1, 2)), new PagingDto(20, 1, false, false))));
         client.get()
@@ -39,7 +46,7 @@ class ItemsControllerTest extends WebFluxTestSupport {
                 .expectStatus()
                 .isOk()
                 .expectBody(String.class)
-                .value(html -> assertThat(html).contains("Coffee", "/items/1", "images/demo/coffee.jpg"));
+                .value(html -> assertThat(html).contains("Coffee", "/items/1", "images/demo/coffee.jpg", "/items/new", "Добавить товар"));
     }
 
     @Test
