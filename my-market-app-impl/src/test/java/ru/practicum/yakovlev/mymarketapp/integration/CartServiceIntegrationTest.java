@@ -160,7 +160,7 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    void totalUsesCurrentPricesAndItemsStayInIdOrder() {
+    void cartKeepsItemOrderAndReloadsPricesAfterCacheEviction() {
         Item coffee = items.save(item("Coffee", "12.50"))
                 .block();
         Item tea = items.save(item("Tea", "3.25"))
@@ -181,7 +181,31 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
         items.save(coffee)
                 .block();
         StepVerifier.create(service.getCart())
-                .assertNext(dto -> assertThat(dto.total()).isEqualByComparingTo("43.25"))
+                .assertNext(dto -> {
+                    assertThat(dto.total()).isEqualByComparingTo("28.25");
+                    assertThat(dto.items())
+                            .extracting(ItemDto::id)
+                            .containsExactly(coffee.getId(), tea.getId());
+                    assertThat(dto.items().getFirst().price()).isEqualByComparingTo("12.50");
+                    assertThat(dto.items())
+                            .extracting(ItemDto::count)
+                            .containsExactly(2, 1);
+                })
+                .verifyComplete();
+
+        // Direct database edits become visible after the cached product is evicted or expires.
+        redis.execute(connection -> connection.serverCommands().flushDb()).then().block();
+        StepVerifier.create(service.getCart())
+                .assertNext(dto -> {
+                    assertThat(dto.total()).isEqualByComparingTo("43.25");
+                    assertThat(dto.items())
+                            .extracting(ItemDto::id)
+                            .containsExactly(coffee.getId(), tea.getId());
+                    assertThat(dto.items().getFirst().price()).isEqualByComparingTo("20.00");
+                    assertThat(dto.items())
+                            .extracting(ItemDto::count)
+                            .containsExactly(2, 1);
+                })
                 .verifyComplete();
     }
 

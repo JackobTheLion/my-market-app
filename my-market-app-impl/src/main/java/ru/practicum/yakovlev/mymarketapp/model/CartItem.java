@@ -38,14 +38,4 @@ public class CartItem {
         this.quantity = quantity;
     }
 
-    public void increment() {
-        quantity = Math.incrementExact(quantity);
-    }
-
-    public void decrement() {
-        if (quantity <= 1) {
-            throw new IllegalStateException("Quantity cannot be decremented below one");
-        }
-        quantity--;
-    }
 }

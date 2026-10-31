@@ -16,6 +16,7 @@ import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.OrderItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.OrderRepository;
 import ru.practicum.yakovlev.mymarketapp.service.OrderService;
+import ru.practicum.yakovlev.mymarketapp.payment.PaymentGateway;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -27,6 +28,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemRepository orderItemRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderMapper orderMapper;
+    private final PaymentGateway paymentGateway;
 
     @Override
     public Mono<OrdersPageDto> getOrders() {
@@ -78,6 +80,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private Mono<Long> saveOrder(List<CartItem> cartItems) {
+        BigDecimal amount = cartItems.stream()
+                .map(entry -> entry.getItem().getPrice().multiply(BigDecimal.valueOf(entry.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         return orderRepository.save(new Order())
                 .flatMap(order -> {
                     List<OrderItem> orderItems = cartItems.stream()
@@ -87,7 +92,7 @@ public class OrderServiceImpl implements OrderService {
                             .then(cartItemRepository.deletePurchasedItems(cartItems.stream()
                                     .map(CartItem::getItemId).toList()))
                             .flatMap(deleted -> deleted == cartItems.size()
-                                    ? Mono.just(order.getId())
+                                    ? paymentGateway.pay(amount).thenReturn(order.getId())
                                     : Mono.error(new IllegalStateException("Cart cleanup did not delete all purchased items")));
                 });
     }

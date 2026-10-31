@@ -4,7 +4,7 @@ WORKDIR /workspace
 
 COPY . .
 
-RUN ./mvnw --batch-mode --no-transfer-progress clean package -DskipTests
+RUN ./mvnw --batch-mode --no-transfer-progress -pl my-market-app-impl -am clean package -DskipTests
 
 FROM eclipse-temurin:21-jre
 

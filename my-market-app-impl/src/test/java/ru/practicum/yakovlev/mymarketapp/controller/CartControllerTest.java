@@ -8,6 +8,8 @@ import org.springframework.web.reactive.function.BodyInserters;
 import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.dto.CartDto;
+import ru.practicum.yakovlev.mymarketapp.dto.ItemDto;
+import ru.practicum.yakovlev.mymarketapp.exception.PaymentException;
 import ru.practicum.yakovlev.mymarketapp.support.WebFluxTestSupport;
 
 import java.math.BigDecimal;
@@ -18,6 +20,49 @@ import static org.mockito.Mockito.*;
 
 class CartControllerTest extends WebFluxTestSupport {
     @Test
+    void enoughBalanceEnablesPurchase() {
+        mockNonEmptyCart();
+        when(paymentGateway.getBalance()).thenReturn(Mono.just(new BigDecimal("100")));
+        client.get().uri("/cart/items").exchange().expectStatus().isOk().expectBody(String.class)
+                .value(html -> assertThat(html).contains("Купить")
+                        .doesNotContain("disabled=\"disabled\"", "Заказ не оформлен"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"insufficient-funds", "rejected", "unavailable"})
+    void failedPurchaseShowsPaymentError(String reason) {
+        mockNonEmptyCart();
+        when(paymentGateway.getBalance()).thenReturn(Mono.just(new BigDecimal("100")));
+
+        client.get().uri("/cart/items?paymentError={reason}", reason)
+                .exchange().expectStatus().isOk().expectBody(String.class)
+                .value(html -> assertThat(html).contains("Заказ не оформлен"));
+    }
+
+    @Test
+    void insufficientBalanceDisablesPurchaseWithMessage() {
+        mockNonEmptyCart();
+        when(paymentGateway.getBalance()).thenReturn(Mono.just(new BigDecimal("1")));
+        client.get().uri("/cart/items").exchange().expectStatus().isOk().expectBody(String.class)
+                .value(html -> assertThat(html).contains("disabled=\"disabled\"", "Недостаточно средств"));
+    }
+
+    @Test
+    void unavailablePaymentServiceDisablesPurchaseWithMessage() {
+        mockNonEmptyCart();
+        when(paymentGateway.getBalance()).thenReturn(Mono.error(new PaymentException(
+                "unavailable", "Сервис платежей недоступен", null)));
+        client.get().uri("/cart/items").exchange().expectStatus().isOk().expectBody(String.class)
+                .value(html -> assertThat(html).contains("disabled=\"disabled\"", "Сервис платежей недоступен"));
+    }
+
+    private void mockNonEmptyCart() {
+        ItemDto item = new ItemDto(
+                1L, "Coffee", "Description", "images/default-image.svg", new BigDecimal("12.50"), 2);
+        when(cartService.getCart()).thenReturn(Mono.just(new CartDto(List.of(item), new BigDecimal("25.00"))));
+    }
+
+    @Test
     void emptyCartHidesPurchaseButton() {
         when(cartService.getCart()).thenReturn(Mono.just(new CartDto(List.of(), BigDecimal.ZERO)));
 
@@ -27,7 +72,7 @@ class CartControllerTest extends WebFluxTestSupport {
                 .expectStatus()
                 .isOk()
                 .expectBody(String.class)
-                .value(html -> assertThat(html).doesNotContain("action=\"/buy\""));
+                .value(html -> assertThat(html).doesNotContain("action=\"/buy\"", "Заказ не оформлен"));
     }
 
     @ParameterizedTest

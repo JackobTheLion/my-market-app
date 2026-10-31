@@ -11,6 +11,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
+import ru.practicum.yakovlev.mymarketapp.payment.PaymentGateway;
 import ru.practicum.yakovlev.mymarketapp.exception.EmptyCartException;
 import ru.practicum.yakovlev.mymarketapp.exception.NotFoundException;
 import ru.practicum.yakovlev.mymarketapp.mapper.OrderMapper;
@@ -39,11 +40,14 @@ class OrderServiceImplTest {
     private CartItemRepository cartItemRepository;
     @Mock
     private OrderMapper orderMapper;
+    @Mock
+    private PaymentGateway paymentGateway;
     @InjectMocks
     private OrderServiceImpl service;
 
     @Test
     void savesSnapshotBeforeDeletingCart() {
+        when(paymentGateway.pay(any())).thenReturn(Mono.empty());
         Item coffee = item(1, "Coffee", "12.50");
         when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(coffee, 2)));
         when(orderRepository.save(any(Order.class)))
@@ -81,6 +85,7 @@ class OrderServiceImplTest {
                 .expectComplete()
                 .verify(java.time.Duration.ofSeconds(5));
         assertThat(cartDeleted).isTrue();
+        verify(paymentGateway).pay(argThat(amount -> amount.compareTo(new java.math.BigDecimal("25.00")) == 0));
         verify(cartItemRepository, never())
                 .findAll();
     }
@@ -91,7 +96,7 @@ class OrderServiceImplTest {
         StepVerifier.create(service.createOrder())
                 .expectError(EmptyCartException.class)
                 .verify();
-        verifyNoInteractions(orderRepository, orderItemRepository);
+        verifyNoInteractions(orderRepository, orderItemRepository, paymentGateway);
         verify(cartItemRepository, never())
                 .deletePurchasedItems(anyList());
     }
@@ -105,6 +110,34 @@ class OrderServiceImplTest {
                 .verify();
         verify(cartItemRepository, never())
                 .deletePurchasedItems(anyList());
+    }
+
+    @Test
+    void failedPositionsAreNeverPaid() {
+        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setId(42L);
+            return Mono.just(order);
+        });
+        when(orderItemRepository.saveAll(anyIterable())).thenReturn(Flux.error(new DataIntegrityViolationException("positions failed")));
+        when(cartItemRepository.deletePurchasedItems(anyList())).thenReturn(Mono.just(1));
+        StepVerifier.create(service.createOrder()).expectError(DataIntegrityViolationException.class).verify();
+        verifyNoInteractions(paymentGateway);
+    }
+
+    @Test
+    void incompleteCartCleanupIsNeverPaid() {
+        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setId(42L);
+            return Mono.just(order);
+        });
+        when(orderItemRepository.saveAll(anyIterable())).thenReturn(Flux.empty());
+        when(cartItemRepository.deletePurchasedItems(anyList())).thenReturn(Mono.just(0));
+        StepVerifier.create(service.createOrder()).expectError(IllegalStateException.class).verify();
+        verifyNoInteractions(paymentGateway);
     }
 
     @Test

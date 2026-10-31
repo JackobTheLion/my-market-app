@@ -9,19 +9,23 @@ import ru.practicum.yakovlev.mymarketapp.controller.BuyController;
 import ru.practicum.yakovlev.mymarketapp.controller.CartController;
 import ru.practicum.yakovlev.mymarketapp.controller.HomeController;
 import ru.practicum.yakovlev.mymarketapp.controller.ImageController;
+import ru.practicum.yakovlev.mymarketapp.controller.ItemCreateController;
 import ru.practicum.yakovlev.mymarketapp.controller.ItemsController;
 import ru.practicum.yakovlev.mymarketapp.controller.OrdersController;
 import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.service.ImageService;
 import ru.practicum.yakovlev.mymarketapp.service.ItemService;
 import ru.practicum.yakovlev.mymarketapp.service.OrderService;
+import ru.practicum.yakovlev.mymarketapp.payment.PaymentGateway;
 
 @WebFluxTest({HomeController.class, ItemsController.class, CartController.class,
-        BuyController.class, OrdersController.class, ImageController.class})
+        BuyController.class, OrdersController.class, ImageController.class, ItemCreateController.class})
 @ActiveProfiles("test")
 public abstract class WebFluxTestSupport {
     @Autowired
     protected WebTestClient client;
+    @MockitoBean
+    protected PaymentGateway paymentGateway;
     @MockitoBean
     protected ItemService itemService;
     @MockitoBean

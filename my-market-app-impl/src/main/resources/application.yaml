@@ -4,6 +4,19 @@ server:
 spring:
   application:
     name: my-market-app
+  webflux:
+    multipart:
+      max-in-memory-size: 256KB
+      max-disk-usage-per-part: 5MB
+      max-parts: 4
+  data:
+    redis:
+      repositories:
+        enabled: false
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 500ms
+      timeout: 500ms
   r2dbc:
     url: ${R2DBC_URL}
     username: ${DB_USERNAME}
@@ -21,6 +34,12 @@ spring:
       insertDemoData: ${application.database.demo.insert-demo-data}
 
 application:
+  cache:
+    product-ttl: ${PRODUCT_CACHE_TTL:PT2M}
+    timeout: ${PRODUCT_CACHE_TIMEOUT:PT0.5S}
+  payment:
+    base-url: ${PAYMENT_BASE_URL:http://localhost:8081}
+    timeout: ${PAYMENT_TIMEOUT:PT3S}
   images:
     root: ${IMAGES_ROOT:images}
     default-image: ${IMAGES_DEFAULT_IMAGE:default-image.svg}
