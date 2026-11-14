@@ -16,8 +16,7 @@
                     <h2>
                         <span class="badge text-bg-success">Витрина магазина</span>
                     </h2>
-                    <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
-                    <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
+                    <nav th:replace="~{fragments/navigation :: menu(true, 'cart')}"></nav>
                 </div>
             </div>
         </div>
@@ -46,12 +45,12 @@
         </div>
         <div class="row p-2">
             <div class="col">
-                <div class="alert alert-warning" th:if="${paymentMessage != null}" th:text="${paymentMessage}"></div>
-                <div class="alert alert-danger" th:if="${!#lists.isEmpty(param.paymentError)}">
-                    Заказ не оформлен. Не удалось подтвердить оплату. Проверьте баланс и попробуйте позже.
-                </div>
+                <div class="alert alert-warning" th:if="${paymentMessage != null and paymentMessage != checkoutErrorMessage}"
+                     th:text="${paymentMessage}"></div>
+                <div class="alert alert-danger" role="alert" th:if="${checkoutErrorMessage != null}"
+                     th:text="|Заказ не оформлен. ${checkoutErrorMessage}|"></div>
                 <p th:if="${balance != null}" th:text="'Баланс: ' + ${balance} + ' руб.'"></p>
-                <form action="/buy" method="post" th:if="${!items.isEmpty()}">
+                <form th:action="@{/buy}" method="post" th:if="${!items.isEmpty()}">
                     <div class="hstack gap-3">
                         <h2 th:text="'Итого: '+${total}+' руб.'"/>
                         <button class="btn btn-warning ms-auto" th:disabled="${!canBuy}">Купить</button>

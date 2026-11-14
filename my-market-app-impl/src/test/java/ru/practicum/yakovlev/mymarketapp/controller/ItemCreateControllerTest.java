@@ -3,46 +3,40 @@ package ru.practicum.yakovlev.mymarketapp.controller;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.reactive.ReactiveMultipartAutoConfiguration;
-import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
-import ru.practicum.yakovlev.mymarketapp.service.ItemService;
+import ru.practicum.yakovlev.mymarketapp.support.WebFluxTestSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@WebFluxTest(ItemCreateController.class)
 @ImportAutoConfiguration(ReactiveMultipartAutoConfiguration.class)
-class ItemCreateControllerTest {
-    @Autowired
-    private WebTestClient client;
-    @MockitoBean
-    private ItemService items;
+@WithMockUser
+class ItemCreateControllerTest extends WebFluxTestSupport {
 
     @Test
-    void rendersFormWithFileUploadAndCatalogLink() {
+    void rendersFormWithFileUploadAndShopNavigation() {
         client.get().uri("/items/new").exchange().expectStatus().isOk()
                 .expectBody(String.class).value(html -> assertThat(html)
-                        .contains("Добавить товар", "multipart/form-data", "name=\"image\"", "href=\"/items\""));
-        verifyNoInteractions(items);
+                        .contains("Добавить товар", "multipart/form-data", "name=\"image\"", "href=\"/items\"",
+                                "href=\"/orders\"", "href=\"/cart/items\"", "href=\"/logout\""));
+        verifyNoInteractions(itemService);
     }
 
     @Test
     void formSubmitsMetadataAndFileAndRedirectsToCreatedProduct() {
-        when(items.createItem(any())).thenReturn(Mono.just(42L));
+        when(itemService.createItem(any())).thenReturn(Mono.just(42L));
         client.post().uri("/items/new").bodyValue(form("Coffee", "12.50", true).build())
                 .exchange().expectStatus().isSeeOther().expectHeader().location("/items/42");
-        verify(items).createItem(argThat(request -> request.getTitle().equals("Coffee")
+        verify(itemService).createItem(argThat(request -> request.getTitle().equals("Coffee")
                 && request.getDescription().equals("Beans") && request.getPrice().toPlainString().equals("12.50")
                 && request.getImage().filename().equals("coffee.png")));
     }
@@ -53,7 +47,7 @@ class ItemCreateControllerTest {
         client.post().uri("/items/new").bodyValue(form("Coffee", price, true).build())
                 .exchange().expectStatus().isOk().expectBody(String.class)
                 .value(html -> assertThat(html).contains("Coffee", "Beans", "Укажите положительную цену"));
-        verifyNoInteractions(items);
+        verifyNoInteractions(itemService);
     }
 
     @Test
@@ -61,7 +55,7 @@ class ItemCreateControllerTest {
         client.post().uri("/items/new").bodyValue(form("Coffee", "12.50", false).build())
                 .exchange().expectStatus().isOk().expectBody(String.class)
                 .value(html -> assertThat(html).contains("Выберите изображение товара", "Coffee"));
-        verifyNoInteractions(items);
+        verifyNoInteractions(itemService);
     }
 
     @Test
@@ -69,12 +63,12 @@ class ItemCreateControllerTest {
         client.post().uri("/items/new").bodyValue(form("", "12.50", true).build())
                 .exchange().expectStatus().isOk().expectBody(String.class)
                 .value(html -> assertThat(html).contains("Укажите название товара"));
-        verifyNoInteractions(items);
+        verifyNoInteractions(itemService);
     }
 
     @Test
     void invalidImageDisplaysFriendlyErrorAndPreservesValues() {
-        when(items.createItem(any())).thenReturn(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid image")));
+        when(itemService.createItem(any())).thenReturn(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid image")));
         client.post().uri("/items/new").bodyValue(form("Coffee", "12.50", true).build())
                 .exchange().expectStatus().isOk().expectBody(String.class)
                 .value(html -> assertThat(html).contains("Выберите корректное изображение PNG или JPEG", "Coffee", "Beans"));
@@ -82,7 +76,7 @@ class ItemCreateControllerTest {
 
     @Test
     void databaseFailureDisplaysFormWithoutRedirect() {
-        when(items.createItem(any())).thenReturn(Mono.error(new IllegalStateException("Database unavailable")));
+        when(itemService.createItem(any())).thenReturn(Mono.error(new IllegalStateException("Database unavailable")));
         client.post().uri("/items/new").bodyValue(form("Coffee", "12.50", true).build())
                 .exchange().expectStatus().isOk().expectHeader().doesNotExist("Location")
                 .expectBody(String.class).value(html -> assertThat(html)
@@ -98,7 +92,7 @@ class ItemCreateControllerTest {
         client.post().uri("/items/new").bodyValue(form.build())
                 .exchange().expectStatus().isEqualTo(413).expectBody(String.class)
                 .value(html -> assertThat(html).contains("Размер изображения не должен превышать 5 МиБ"));
-        verifyNoInteractions(items);
+        verifyNoInteractions(itemService);
     }
 
     private MultipartBodyBuilder form(String title, String price, boolean includeImage) {

@@ -15,6 +15,7 @@ import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.service.ItemService;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
@@ -44,10 +45,10 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void searchIncludesDescriptionAndCartQuantity() {
-        cart.updateItem(coffeeId, CartAction.PLUS)
-                .then(cart.updateItem(coffeeId, CartAction.PLUS))
+        cart.updateItem(TEST_USER_ID, coffeeId, CartAction.PLUS)
+                .then(cart.updateItem(TEST_USER_ID, coffeeId, CartAction.PLUS))
                 .block();
-        StepVerifier.create(service.getItems("  cOfFeE  ", ItemSort.ALPHA, 1, 10))
+        StepVerifier.create(service.getItems(TEST_USER_ID, "  cOfFeE  ", ItemSort.ALPHA, 1, 10))
                 .assertNext(page -> {
                     assertThat(page.items())
                             .extracting(ItemDto::title)
@@ -62,7 +63,7 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void pricePagingReportsBothNavigationFlags() {
-        StepVerifier.create(service.getItems(null, ItemSort.PRICE, 1, 3))
+        StepVerifier.create(service.getItems(TEST_USER_ID, null, ItemSort.PRICE, 1, 3))
                 .assertNext(page -> {
                     assertThat(page.items())
                             .extracting(ItemDto::title)
@@ -70,7 +71,7 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
                     assertThat(page.paging()).isEqualTo(new PagingDto(3, 1, false, true));
                 })
                 .verifyComplete();
-        StepVerifier.create(service.getItems(null, ItemSort.PRICE, 2, 3))
+        StepVerifier.create(service.getItems(TEST_USER_ID, null, ItemSort.PRICE, 2, 3))
                 .assertNext(page -> {
                     assertThat(page.items())
                             .extracting(ItemDto::title)
@@ -82,7 +83,7 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void alphabeticCatalogContainsOnlyRealItems() {
-        StepVerifier.create(service.getItems(" ", ItemSort.ALPHA, 1, 10))
+        StepVerifier.create(service.getItems(TEST_USER_ID, " ", ItemSort.ALPHA, 1, 10))
                 .assertNext(page ->
                         assertThat(page.items())
                                 .extracting(ItemDto::title)
@@ -92,10 +93,10 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void emptySearchAndPagePastEndReturnEmptyLists() {
-        StepVerifier.create(service.getItems("missing", ItemSort.NO, 1, 10))
+        StepVerifier.create(service.getItems(TEST_USER_ID, "missing", ItemSort.NO, 1, 10))
                 .assertNext(page -> assertThat(page.items()).isEmpty())
                 .verifyComplete();
-        StepVerifier.create(service.getItems(null, ItemSort.PRICE, 10, 10))
+        StepVerifier.create(service.getItems(TEST_USER_ID, null, ItemSort.PRICE, 10, 10))
                 .assertNext(page -> {
                     assertThat(page.items()).isEmpty();
                     assertThat(page.paging().hasNext()).isFalse();
@@ -105,13 +106,13 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void detailsAndNotFoundWorkReactively() {
-        StepVerifier.create(service.getItem(coffeeId))
+        StepVerifier.create(service.getItem(TEST_USER_ID, coffeeId))
                 .assertNext(dto -> {
                     assertThat(dto.title()).isEqualTo("Coffee");
                     assertThat(dto.count()).isZero();
                 })
                 .verifyComplete();
-        StepVerifier.create(service.getItem(Long.MAX_VALUE))
+        StepVerifier.create(service.getItem(TEST_USER_ID, Long.MAX_VALUE))
                 .expectError(NotFoundException.class)
                 .verify();
     }
@@ -122,7 +123,7 @@ class ItemServiceIntegrationTest extends IntegrationTestSupport {
                 .block();
         Item second = items.save(item("Same", "100"))
                 .block();
-        StepVerifier.create(service.getItems("Same", ItemSort.PRICE, 1, 10))
+        StepVerifier.create(service.getItems(TEST_USER_ID, "Same", ItemSort.PRICE, 1, 10))
                 .assertNext(page -> assertThat(page.items())
                         .extracting(ItemDto::id)
                         .containsExactlyInAnyOrder(first.getId(), second.getId()))

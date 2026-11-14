@@ -22,7 +22,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PaymentException.class)
     public String paymentFailed(PaymentException exception) {
         String location = UriComponentsBuilder.fromPath("/cart/items")
-                .queryParam("paymentError", exception.getReason()).build().encode().toUriString();
+                .queryParam("paymentError", exception.getReason().getCode()).build().encode().toUriString();
         return "redirect:" + location;
     }
 

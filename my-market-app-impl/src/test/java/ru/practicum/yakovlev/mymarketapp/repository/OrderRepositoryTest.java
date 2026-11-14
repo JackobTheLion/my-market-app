@@ -8,6 +8,7 @@ import ru.practicum.yakovlev.mymarketapp.model.Order;
 import ru.practicum.yakovlev.mymarketapp.model.OrderItem;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
@@ -23,7 +24,7 @@ class OrderRepositoryTest extends IntegrationTestSupport {
     void loadsOrderAndPositionsUsingScalarForeignKeys() {
         Item coffee = items.save(item("Coffee", "12.50"))
                 .block();
-        Order order = orders.save(new Order())
+        Order order = orders.save(new Order(TEST_USER_ID))
                 .block();
         positions.save(new OrderItem(order, coffee, 2))
                 .block();

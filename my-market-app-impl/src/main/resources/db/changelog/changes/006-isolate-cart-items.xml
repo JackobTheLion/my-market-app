@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+    <changeSet id="006-isolate-cart-items" author="yakovlev">
+        <dropPrimaryKey tableName="cart_items" schemaName="${appSchema}" constraintName="cart_items_pkey"/>
+        <addPrimaryKey tableName="cart_items" schemaName="${appSchema}" constraintName="cart_items_pkey"
+                       columnNames="user_id, item_id"/>
+        <createIndex indexName="cart_items_item_id_idx" tableName="cart_items" schemaName="${appSchema}">
+            <column name="item_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

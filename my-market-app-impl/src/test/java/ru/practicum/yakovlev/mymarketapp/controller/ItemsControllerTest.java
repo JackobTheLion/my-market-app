@@ -6,6 +6,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -25,10 +27,12 @@ import java.net.URI;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.itemDto;
 
+@WithUserDetails(value = "demo", userDetailsServiceBeanName = "testCustomerDetailsService")
 class ItemsControllerTest extends WebFluxTestSupport {
     @Test
     void creationPageIsNotTreatedAsProductId() {
@@ -39,7 +43,7 @@ class ItemsControllerTest extends WebFluxTestSupport {
 
     @Test
     void rendersCatalog() {
-        when(itemService.getItems(null, ItemSort.NO, 1, 20)).thenReturn(Mono.just(new ItemPageDto(List.of(itemDto(1, 2)), new PagingDto(20, 1, false, false))));
+        when(itemService.getItems(TEST_USER_ID, null, ItemSort.NO, 1, 20)).thenReturn(Mono.just(new ItemPageDto(List.of(itemDto(1, 2)), new PagingDto(20, 1, false, false))));
         client.get()
                 .uri("/items?pageSize=20")
                 .exchange()
@@ -50,24 +54,37 @@ class ItemsControllerTest extends WebFluxTestSupport {
     }
 
     @Test
+    @WithAnonymousUser
+    void guestCanBrowseCatalogAndItemDetails() {
+        when(itemService.getItems(null, null, ItemSort.NO, 1, 10)).thenReturn(
+                Mono.just(new ItemPageDto(List.of(itemDto(1, 0)), new PagingDto(10, 1, false, false))));
+        when(itemService.getItem(null, 1)).thenReturn(Mono.just(itemDto(1, 0)));
+
+        webTestClient.get().uri("/items").exchange().expectStatus().isOk()
+                .expectBody(String.class).value(html -> assertThat(html).contains("Coffee", "href=\"/login\""));
+        webTestClient.get().uri("/items/1").exchange().expectStatus().isOk()
+                .expectBody(String.class).value(html -> assertThat(html).contains("Coffee", "href=\"/login\""));
+    }
+
+    @Test
     void forwardsSearchSortingAndPaging() {
-        when(itemService.getItems("coffee", ItemSort.PRICE, 2, 20)).thenReturn(Mono.just(new ItemPageDto(List.of(), new PagingDto(20, 2, true, false))));
+        when(itemService.getItems(TEST_USER_ID, "coffee", ItemSort.PRICE, 2, 20)).thenReturn(Mono.just(new ItemPageDto(List.of(), new PagingDto(20, 2, true, false))));
         client.get()
                 .uri("/items?search=coffee&sort=PRICE&pageNumber=2&pageSize=20")
                 .exchange()
                 .expectStatus()
                 .isOk();
         verify(itemService)
-                .getItems("coffee", ItemSort.PRICE, 2, 20);
+                .getItems(TEST_USER_ID, "coffee", ItemSort.PRICE, 2, 20);
     }
 
     @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {"tea & coffee", "C++/Java?", "чай #1", "100% {search}"})
     void renderedCartButtonsSubmitQueryParametersAndPreserveCatalogState(String search) {
-        when(itemService.getItems(search, ItemSort.PRICE, 2, 20)).thenReturn(Mono.just(new ItemPageDto(List.of(itemDto(1, 0)), new PagingDto(20, 2, true, false))));
-        when(cartService.updateItem(1, CartAction.MINUS)).thenReturn(Mono.empty());
-        when(cartService.updateItem(1, CartAction.PLUS)).thenReturn(Mono.empty());
+        when(itemService.getItems(TEST_USER_ID, search, ItemSort.PRICE, 2, 20)).thenReturn(Mono.just(new ItemPageDto(List.of(itemDto(1, 0)), new PagingDto(20, 2, true, false))));
+        when(cartService.updateItem(TEST_USER_ID, 1, CartAction.MINUS)).thenReturn(Mono.empty());
+        when(cartService.updateItem(TEST_USER_ID, 1, CartAction.PLUS)).thenReturn(Mono.empty());
 
         String catalogUrl = "/items?sort=PRICE&pageNumber=2&pageSize=20";
         WebTestClient.RequestHeadersUriSpec<?> request = client.get();
@@ -107,14 +124,14 @@ class ItemsControllerTest extends WebFluxTestSupport {
                     });
         }
         verify(cartService)
-                .updateItem(1, CartAction.MINUS);
+                .updateItem(TEST_USER_ID, 1, CartAction.MINUS);
         verify(cartService, times(2))
-                .updateItem(1, CartAction.PLUS);
+                .updateItem(TEST_USER_ID, 1, CartAction.PLUS);
     }
 
     @Test
     void postUsesQueryParametersWhenBodyContainsOtherValues() {
-        when(cartService.updateItem(1, CartAction.PLUS)).thenReturn(Mono.empty());
+        when(cartService.updateItem(TEST_USER_ID, 1, CartAction.PLUS)).thenReturn(Mono.empty());
         client.post()
                 .uri("/items?id=1&action=PLUS&pageSize=15")
                 .body(BodyInserters.fromFormData("id", "99")
@@ -126,7 +143,7 @@ class ItemsControllerTest extends WebFluxTestSupport {
                 .expectHeader()
                 .location("/items?sort=NO&pageNumber=1&pageSize=15");
         verify(cartService)
-                .updateItem(1, CartAction.PLUS);
+                .updateItem(TEST_USER_ID, 1, CartAction.PLUS);
     }
 
     @Test
@@ -179,7 +196,7 @@ class ItemsControllerTest extends WebFluxTestSupport {
     @ParameterizedTest
     @EnumSource(CartAction.class)
     void successfulDetailUpdateRedirectsToItem(CartAction action) {
-        when(cartService.updateItem(42, action)).thenReturn(Mono.empty());
+        when(cartService.updateItem(TEST_USER_ID, 42, action)).thenReturn(Mono.empty());
 
         client.post()
                 .uri("/items/42?action={action}", action)
@@ -189,7 +206,7 @@ class ItemsControllerTest extends WebFluxTestSupport {
                 .expectHeader()
                 .location("/items/42");
 
-        verify(cartService).updateItem(42, action);
+        verify(cartService).updateItem(TEST_USER_ID, 42, action);
         verifyNoMoreInteractions(cartService);
         verifyNoInteractions(itemService);
     }
@@ -200,7 +217,7 @@ class ItemsControllerTest extends WebFluxTestSupport {
             "pageNumber, /items?sort=PRICE&pageNumber=1&pageSize=20"
     })
     void emptyQueryParameterUsesDefaultAndPreservesOtherParameters(String field, String location) {
-        when(cartService.updateItem(1, CartAction.PLUS)).thenReturn(Mono.empty());
+        when(cartService.updateItem(TEST_USER_ID, 1, CartAction.PLUS)).thenReturn(Mono.empty());
         LinkedMultiValueMap<String, String> parameters = new LinkedMultiValueMap<String, String>();
         parameters.add("id", "1");
         parameters.add("action", "PLUS");
@@ -218,12 +235,12 @@ class ItemsControllerTest extends WebFluxTestSupport {
                 .expectHeader()
                 .value("Location", actual -> assertRedirect(actual, location));
         verify(cartService)
-                .updateItem(1, CartAction.PLUS);
+                .updateItem(TEST_USER_ID, 1, CartAction.PLUS);
     }
 
     @Test
     void emptyQueryParametersUseDefaults() {
-        when(cartService.updateItem(1, CartAction.PLUS)).thenReturn(Mono.empty());
+        when(cartService.updateItem(TEST_USER_ID, 1, CartAction.PLUS)).thenReturn(Mono.empty());
         client.post()
                 .uri("/items?id=1&action=PLUS&sort=&pageNumber=&pageSize=20")
                 .exchange()
@@ -233,12 +250,12 @@ class ItemsControllerTest extends WebFluxTestSupport {
                 .value("Location", location -> assertRedirect(location,
                         "/items?sort=NO&pageNumber=1&pageSize=20"));
         verify(cartService)
-                .updateItem(1, CartAction.PLUS);
+                .updateItem(TEST_USER_ID, 1, CartAction.PLUS);
     }
 
     @Test
     void missingQueryParametersUseDefaults() {
-        when(cartService.updateItem(1, CartAction.PLUS)).thenReturn(Mono.empty());
+        when(cartService.updateItem(TEST_USER_ID, 1, CartAction.PLUS)).thenReturn(Mono.empty());
         client.post()
                 .uri("/items?id=1&action=PLUS&pageSize=20")
                 .exchange()
@@ -248,12 +265,12 @@ class ItemsControllerTest extends WebFluxTestSupport {
                 .value("Location", location -> assertRedirect(location,
                         "/items?sort=NO&pageNumber=1&pageSize=20"));
         verify(cartService)
-                .updateItem(1, CartAction.PLUS);
+                .updateItem(TEST_USER_ID, 1, CartAction.PLUS);
     }
 
     @Test
     void missingItemReturns404() {
-        when(itemService.getItem(99)).thenReturn(Mono.error(new NotFoundException("missing")));
+        when(itemService.getItem(TEST_USER_ID, 99)).thenReturn(Mono.error(new NotFoundException("missing")));
         client.get()
                 .uri("/items/99")
                 .exchange()
@@ -263,7 +280,7 @@ class ItemsControllerTest extends WebFluxTestSupport {
 
     @Test
     void failedCartUpdateDoesNotRedirect() {
-        when(cartService.updateItem(99, CartAction.PLUS)).thenReturn(Mono.error(new NotFoundException("missing")));
+        when(cartService.updateItem(TEST_USER_ID, 99, CartAction.PLUS)).thenReturn(Mono.error(new NotFoundException("missing")));
         client.post()
                 .uri("/items?id=99&action=PLUS")
                 .exchange()

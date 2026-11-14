@@ -11,18 +11,23 @@ import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.reactive.server.EntityExchangeResult;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
+import ru.practicum.yakovlev.mymarketapp.config.SecurityConfiguration;
 import ru.practicum.yakovlev.mymarketapp.mapper.ItemMapper;
 import ru.practicum.yakovlev.mymarketapp.model.Item;
 import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
+import ru.practicum.yakovlev.mymarketapp.repository.CustomerRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.ItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.ProductCacheRepository;
 import ru.practicum.yakovlev.mymarketapp.service.impl.ImageServiceImpl;
 import ru.practicum.yakovlev.mymarketapp.service.impl.ItemServiceImpl;
+import ru.practicum.yakovlev.mymarketapp.support.CustomerWebSession;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,14 +36,17 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.csrf;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.imageBytes;
 
 @WebFluxTest({ItemCreateController.class, ImageController.class})
-@Import({ItemServiceImpl.class, ImageServiceImpl.class})
+@Import({ItemServiceImpl.class, ImageServiceImpl.class, SecurityConfiguration.class})
 @ImportAutoConfiguration(ReactiveMultipartAutoConfiguration.class)
+@WithMockUser
 class ItemCreateHttpTest {
     @TempDir private static Path directory;
     @Autowired private WebTestClient client;
+    @MockitoBean private CustomerRepository customers;
     @MockitoBean private ItemRepository items;
     @MockitoBean private ProductCacheRepository cache;
     @MockitoBean private CartItemRepository cart;
@@ -68,7 +76,11 @@ class ItemCreateHttpTest {
         });
         when(cache.invalidatePages()).thenReturn(Mono.empty());
         byte[] png = imageBytes("png");
-        client.post().uri("/items/new").bodyValue(form(png).build())
+        EntityExchangeResult<String> page = client.get().uri("/items/new").exchange()
+                .expectStatus().isOk().expectBody(String.class).returnResult();
+        MultipartBodyBuilder form = form(png);
+        form.part("_csrf", CustomerWebSession.csrfToken(page.getResponseBody()));
+        client.post().uri("/items/new").cookie("SESSION", CustomerWebSession.sessionId(page)).bodyValue(form.build())
                 .exchange().expectStatus().isSeeOther().expectHeader().location("/items/42");
         String imagePath;
         try (Stream<Path> files = Files.list(directory.resolve("uploads"))) {
@@ -82,7 +94,7 @@ class ItemCreateHttpTest {
 
     @Test
     void invalidImageShowsErrorWithoutWritingProduct() throws Exception {
-        client.post().uri("/items/new").bodyValue(form(new byte[]{1, 2, 3}).build())
+        client.mutateWith(csrf()).post().uri("/items/new").bodyValue(form(new byte[]{1, 2, 3}).build())
                 .exchange().expectStatus().isOk().expectBody(String.class)
                 .value(html -> assertThat(html).contains("Выберите корректное изображение PNG или JPEG"));
         verifyNoInteractions(items, cache);
@@ -92,7 +104,7 @@ class ItemCreateHttpTest {
     @Test
     void failedInsertDeletesImageAndPreservesForm() throws Exception {
         when(items.save(any(Item.class))).thenReturn(Mono.error(new IllegalStateException("Insert failed")));
-        client.post().uri("/items/new").bodyValue(form(imageBytes("png")).build())
+        client.mutateWith(csrf()).post().uri("/items/new").bodyValue(form(imageBytes("png")).build())
                 .exchange().expectStatus().isOk().expectBody(String.class)
                 .value(html -> assertThat(html).contains("Не удалось добавить товар", "Coffee", "Beans"));
         verifyNoInteractions(cache);

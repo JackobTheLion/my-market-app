@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+    <changeSet id="004-create-users" author="yakovlev">
+        <createTable tableName="users" schemaName="${appSchema}">
+            <column name="id" type="BIGINT" autoIncrement="true" generationType="BY DEFAULT" startWith="2">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="username" type="VARCHAR(255)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="users_username_unique"/>
+            </column>
+            <column name="password_hash" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <insert tableName="users" schemaName="${appSchema}">
+            <column name="id" valueNumeric="1"/>
+            <column name="username" value="demo"/>
+            <column name="password_hash" value="$2a$10$5FGEzIuZzMXsEnp/5y2E.e7I3QMJxYHv9ItOJLuZX5i.ppFu1jmjO"/>
+            <column name="enabled" valueBoolean="true"/>
+        </insert>
+
+        <rollback>
+            <dropTable tableName="users" schemaName="${appSchema}"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -21,6 +21,9 @@ public class Order {
     @Id
     private Long id;
 
+    @Column("user_id")
+    private Long userId;
+
     @Column("created_at")
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
@@ -28,6 +31,10 @@ public class Order {
     private List<OrderItem> items = new ArrayList<>();
 
     public Order() {
+    }
+
+    public Order(long userId) {
+        this.userId = userId;
     }
 
     public List<OrderItem> getItems() {

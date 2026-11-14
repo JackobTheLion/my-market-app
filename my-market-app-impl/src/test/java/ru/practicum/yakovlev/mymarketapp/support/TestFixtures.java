@@ -11,6 +11,8 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 
 public final class TestFixtures {
+    public static final long TEST_USER_ID = 1L;
+
     private TestFixtures() {
     }
 

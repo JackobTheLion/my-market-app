@@ -3,6 +3,7 @@ package ru.practicum.yakovlev.mymarketapp.api.controller;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.api.enums.ItemSort;
+import ru.practicum.yakovlev.mymarketapp.security.CustomerPrincipal;
 
 @RequestMapping(ApiConstants.ITEMS_PATH)
 public interface ItemsControllerApi {
@@ -22,7 +24,8 @@ public interface ItemsControllerApi {
             @RequestParam(name = "sort", required = false, defaultValue = "NO") @NotNull ItemSort sort,
             @RequestParam(name = "pageNumber", required = false, defaultValue = "1") @Positive int pageNumber,
             @RequestParam(name = "pageSize", required = false, defaultValue = "10") @Positive @Max(100) int pageSize,
-            Model model
+            Model model,
+            @AuthenticationPrincipal CustomerPrincipal customer
     );
 
     @PostMapping
@@ -33,16 +36,22 @@ public interface ItemsControllerApi {
             @RequestParam(name = "pageNumber", required = false, defaultValue = "1") @Positive int pageNumber,
             @RequestParam(name = "pageSize", required = false, defaultValue = "10") @Positive @Max(100) int pageSize,
             @RequestParam("action") @NotNull CartAction action,
-            Model model
+            Model model,
+            @AuthenticationPrincipal CustomerPrincipal customer
     );
 
     @GetMapping("/{id}")
-    Mono<String> getItem(@PathVariable("id") @Positive long id, Model model);
+    Mono<String> getItem(
+            @PathVariable("id") @Positive long id,
+            Model model,
+            @AuthenticationPrincipal CustomerPrincipal customer
+    );
 
     @PostMapping("/{id}")
     Mono<String> updateItemInCart(
             @PathVariable("id") @Positive long id,
             @RequestParam("action") @NotNull CartAction action,
-            Model model
+            Model model,
+            @AuthenticationPrincipal CustomerPrincipal customer
     );
 }

@@ -3,5 +3,14 @@ server:
 spring:
   application:
     name: payment-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/market}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8180/realms/market/protocol/openid-connect/certs}
 payment:
+  oauth2:
+    audience: payments
+    client-id: market-app
   initial-balance: ${PAYMENT_INITIAL_BALANCE:100000.00}

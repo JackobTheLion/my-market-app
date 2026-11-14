@@ -18,9 +18,7 @@
                     <h2>
                         <span class="badge text-bg-success">Витрина магазина</span>
                     </h2>
-                    <a href="/items/new" class="btn btn-outline-success ms-auto bi bi-plus-lg"> Добавить товар</a>
-                    <a href="/orders" class="btn btn-secondary bi bi-file-earmark-text"> Заказы</a>
-                    <a href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>
+                    <nav th:replace="~{fragments/navigation :: menu(${authenticated}, 'catalog')}"></nav>
                 </div>
             </div>
         </div>
@@ -63,7 +61,7 @@
                             <span class="badge text-bg-success justify-content-end" th:text="${item.price()}+' руб.'"></span>
                         </h5>
                         <p class="card-text" th:text="${item.description()}"></p>
-                        <form method="post"
+                        <form th:if="${authenticated}" method="post"
                               th:with="updateUrl=@{/items(id=${item.id()}, search=${search}, sort=${sort},
                                                         pageNumber=${paging.pageNumber()}, pageSize=${paging.pageSize()})}"
                               th:action="${updateUrl}">

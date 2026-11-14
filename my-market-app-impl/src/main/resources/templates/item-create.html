@@ -11,7 +11,7 @@
 <main class="container py-4">
     <div class="row justify-content-center">
         <div class="col-12 col-lg-8">
-            <a href="/items" class="link-secondary">&larr; Вернуться к каталогу</a>
+            <nav th:replace="~{fragments/navigation :: menu(true, 'item-create')}"></nav>
             <div class="card shadow-sm mt-3">
                 <div class="card-body p-4">
                     <h1 class="h3 mb-4">Добавить товар</h1>

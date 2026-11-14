@@ -31,14 +31,14 @@ public class OrderServiceImpl implements OrderService {
     private final PaymentGateway paymentGateway;
 
     @Override
-    public Mono<OrdersPageDto> getOrders() {
-        return orderRepository.findAllByOrderByCreatedAtDescIdDesc()
+    public Mono<OrdersPageDto> getOrders(long userId) {
+        return orderRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId)
                 .collectList()
                 .flatMap(orders -> {
                     if (orders.isEmpty()) {
                         return Mono.just(new OrdersPageDto(List.of(), BigDecimal.ZERO));
                     }
-                    return orderItemRepository.findAllByOrderByOrderIdAsc()
+                    return orderItemRepository.findAllByUserId(userId)
                             .collectMultimap(OrderItem::getOrderId)
                             .map(itemsByOrder -> {
                                 List<OrderDto> dtos = orders.stream()
@@ -54,8 +54,8 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public Mono<OrderDto> getOrder(long id) {
-        return orderRepository.findById(id)
+    public Mono<OrderDto> getOrder(long userId, long id) {
+        return orderRepository.findByIdAndUserId(id, userId)
                 .switchIfEmpty(Mono.error(new NotFoundException("Order not found: " + id)))
                 .flatMap(this::loadItems)
                 .map(orderMapper::toDto);
@@ -71,28 +71,28 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public Mono<Long> createOrder() {
-        return cartItemRepository.findAllWithItemsForUpdate()
+    public Mono<Long> createOrder(long userId) {
+        return cartItemRepository.findAllWithItemsForUpdate(userId)
                 .collectList()
                 .filter(cartItems -> !cartItems.isEmpty())
                 .switchIfEmpty(Mono.error(new EmptyCartException()))
-                .flatMap(this::saveOrder);
+                .flatMap(cartItems -> saveOrder(userId, cartItems));
     }
 
-    private Mono<Long> saveOrder(List<CartItem> cartItems) {
+    private Mono<Long> saveOrder(long userId, List<CartItem> cartItems) {
         BigDecimal amount = cartItems.stream()
                 .map(entry -> entry.getItem().getPrice().multiply(BigDecimal.valueOf(entry.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return orderRepository.save(new Order())
+        return orderRepository.save(new Order(userId))
                 .flatMap(order -> {
                     List<OrderItem> orderItems = cartItems.stream()
                             .map(cartItem -> new OrderItem(order, cartItem.getItem(), cartItem.getQuantity()))
                             .toList();
                     return orderItemRepository.saveAll(orderItems)
-                            .then(cartItemRepository.deletePurchasedItems(cartItems.stream()
+                            .then(cartItemRepository.deletePurchasedItems(userId, cartItems.stream()
                                     .map(CartItem::getItemId).toList()))
                             .flatMap(deleted -> deleted == cartItems.size()
-                                    ? paymentGateway.pay(amount).thenReturn(order.getId())
+                                    ? paymentGateway.pay(userId, amount).thenReturn(order.getId())
                                     : Mono.error(new IllegalStateException("Cart cleanup did not delete all purchased items")));
                 });
     }

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<body>
+<nav th:fragment="menu(authenticated, page)" class="d-flex flex-wrap justify-content-end gap-2 ms-auto"
+     aria-label="Навигация магазина">
+    <a th:if="${page != 'catalog'}" th:href="@{/items}" class="btn btn-secondary bi bi-arrow-left-square"> Каталог</a>
+    <th:block th:if="${authenticated}">
+        <a th:if="${page == 'catalog'}" th:href="@{/items/new}" class="btn btn-outline-success bi bi-plus-lg"> Добавить товар</a>
+        <a th:if="${page != 'orders'}" th:href="@{/orders}" class="btn btn-secondary bi bi-file-earmark-text"> Заказы</a>
+        <a th:if="${page != 'cart'}" th:href="@{/cart/items}" class="btn btn-secondary bi bi-cart4"> Корзина</a>
+        <a th:href="@{/logout}" class="btn btn-outline-secondary">Выйти</a>
+    </th:block>
+    <th:block th:unless="${authenticated}">
+        <a th:href="@{/login}" class="btn btn-primary">Войти</a>
+        <a th:href="@{/register}" class="btn btn-outline-primary">Регистрация</a>
+    </th:block>
+</nav>
+</body>
+</html>

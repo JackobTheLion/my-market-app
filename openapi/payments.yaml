@@ -1,13 +1,23 @@
 openapi: 3.0.3
 info:
   title: Market payment service
-  version: 1.0.0
-  description: Single shared account. Amounts and balance are expressed in RUB.
+  version: 2.0.0
+  description: Per-customer accounts. Amounts and balances are expressed in RUB. Obtain a service token using OAuth2 Client Credentials.
+security:
+  - paymentsToken: []
 paths:
   /api/balance:
     get:
       tags: [Payments]
       operationId: getBalance
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
       responses:
         '200':
           description: Current account balance
@@ -15,6 +25,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BalanceResponse'
+        '400':
+          description: Invalid account identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentError'
+        '401':
+          description: Missing or invalid bearer token
   /api/payments:
     post:
       tags: [Payments]
@@ -39,6 +57,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaymentError'
+        '401':
+          description: Missing or invalid bearer token
         '409':
           description: Insufficient funds
           content:
@@ -46,6 +66,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentError'
 components:
+  securitySchemes:
+    paymentsToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     BalanceResponse:
       type: object
@@ -56,8 +81,12 @@ components:
           minimum: 0
     PaymentRequest:
       type: object
-      required: [amount]
+      required: [userId, amount]
       properties:
+        userId:
+          type: integer
+          format: int64
+          minimum: 1
         amount:
           type: number
           description: Amount in RUB with at most 17 integral and 2 fractional digits, including trailing zeros.

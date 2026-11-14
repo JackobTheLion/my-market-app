@@ -6,7 +6,7 @@ import ru.practicum.yakovlev.mymarketapp.dto.CartDto;
 
 public interface CartService {
 
-    Mono<CartDto> getCart();
+    Mono<CartDto> getCart(long userId);
 
-    Mono<Void> updateItem(long itemId, CartAction action);
+    Mono<Void> updateItem(long userId, long itemId, CartAction action);
 }

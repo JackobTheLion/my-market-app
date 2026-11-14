@@ -21,9 +21,7 @@
                 <h2>
                     <span class="badge text-bg-success">Витрина магазина</span>
                 </h2>
-                <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
-                <a href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>
-                <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
+                <nav th:replace="~{fragments/navigation :: menu(true, 'order')}"></nav>
             </div>
         </div>
     </div>

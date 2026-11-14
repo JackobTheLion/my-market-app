@@ -8,6 +8,7 @@ import ru.practicum.yakovlev.mymarketapp.api.controller.ItemsControllerApi;
 import ru.practicum.yakovlev.mymarketapp.api.enums.CartAction;
 import ru.practicum.yakovlev.mymarketapp.api.enums.ItemSort;
 import ru.practicum.yakovlev.mymarketapp.dto.ItemDto;
+import ru.practicum.yakovlev.mymarketapp.security.CustomerPrincipal;
 import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.service.ItemService;
 
@@ -29,9 +30,12 @@ public class ItemsController implements ItemsControllerApi {
             ItemSort sort,
             int pageNumber,
             int pageSize,
-            Model model
+            Model model,
+            CustomerPrincipal customer
     ) {
-        return itemService.getItems(search, sort, pageNumber, pageSize)
+        Long customerId = customer == null ? null : customer.getUserId();
+        model.addAttribute("authenticated", customerId != null);
+        return itemService.getItems(customerId, search, sort, pageNumber, pageSize)
                 .map(page -> {
                     model.addAttribute("items", prepareRows(page.items()));
                     model.addAttribute("search", search);
@@ -49,7 +53,8 @@ public class ItemsController implements ItemsControllerApi {
             int pageNumber,
             int pageSize,
             CartAction action,
-            Model model
+            Model model,
+            CustomerPrincipal customer
     ) {
         String redirect = "redirect:/items?";
         if (search != null) {
@@ -60,13 +65,15 @@ public class ItemsController implements ItemsControllerApi {
         model.addAttribute("pageNumber", pageNumber);
         model.addAttribute("pageSize", pageSize);
 
-        return cartService.updateItem(id, action)
+        return cartService.updateItem(customer.getUserId(), id, action)
                 .thenReturn(redirect + "sort={sort}&pageNumber={pageNumber}&pageSize={pageSize}");
     }
 
     @Override
-    public Mono<String> getItem(long id, Model model) {
-        return itemService.getItem(id)
+    public Mono<String> getItem(long id, Model model, CustomerPrincipal customer) {
+        Long customerId = customer == null ? null : customer.getUserId();
+        model.addAttribute("authenticated", customerId != null);
+        return itemService.getItem(customerId, id)
                 .map(item -> {
                     model.addAttribute("item", item);
                     return "item";
@@ -74,8 +81,8 @@ public class ItemsController implements ItemsControllerApi {
     }
 
     @Override
-    public Mono<String> updateItemInCart(long id, CartAction action, Model model) {
-        return cartService.updateItem(id, action)
+    public Mono<String> updateItemInCart(long id, CartAction action, Model model, CustomerPrincipal customer) {
+        return cartService.updateItem(customer.getUserId(), id, action)
                 .thenReturn("redirect:/items/" + id);
     }
 
