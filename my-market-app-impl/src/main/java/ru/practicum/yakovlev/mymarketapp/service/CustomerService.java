@@ -4,5 +4,5 @@ import reactor.core.publisher.Mono;
 
 public interface CustomerService {
 
-    Mono<Boolean> register(String username, String password);
+    Mono<RegistrationResult> register(String username, String password);
 }
