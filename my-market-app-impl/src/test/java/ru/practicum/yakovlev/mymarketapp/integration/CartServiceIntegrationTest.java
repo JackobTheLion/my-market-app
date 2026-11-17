@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collections;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
@@ -49,13 +50,13 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
                     .single()
                     .block(timeout);
 
-            service.updateItem(id, CartAction.PLUS)
-                    .then(service.updateItem(id, CartAction.PLUS))
-                    .then(service.updateItem(id, CartAction.MINUS))
+            service.updateItem(TEST_USER_ID, id, CartAction.PLUS)
+                    .then(service.updateItem(TEST_USER_ID, id, CartAction.PLUS))
+                    .then(service.updateItem(TEST_USER_ID, id, CartAction.MINUS))
                     .block(timeout);
-            assertThat(cart.findById(id).block(timeout).getQuantity()).isEqualTo(1);
-            service.updateItem(id, CartAction.DELETE).block(timeout);
-            assertThat(cart.count().block(timeout)).isZero();
+            assertThat(cart.findItem(TEST_USER_ID, id).block(timeout).getQuantity()).isEqualTo(1);
+            service.updateItem(TEST_USER_ID, id, CartAction.DELETE).block(timeout);
+            assertThat(cart.countByUserId(TEST_USER_ID).block(timeout)).isZero();
         } finally {
             Mono.from(connection.rollbackTransaction())
                     .then(Mono.from(connection.close()))
@@ -67,11 +68,11 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
     void concurrentPlusesCreatePositionWithoutLosingUnits() {
         long id = items.save(item("Coffee", "12.50")).block().getId();
 
-        Runnable plus = () -> service.updateItem(id, CartAction.PLUS).block(Duration.ofSeconds(10));
+        Runnable plus = () -> service.updateItem(TEST_USER_ID, id, CartAction.PLUS).block(Duration.ofSeconds(10));
         RaceTestUtils.race(15, Schedulers.boundedElastic(),
                 Collections.nCopies(40, plus).toArray(Runnable[]::new));
 
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(40))
                 .expectComplete()
                 .verify(Duration.ofSeconds(30));
@@ -81,13 +82,13 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
     void concurrentMinusesRemoveEveryUnit() {
         int quantity = 40;
         long id = items.save(item("Coffee", "12.50")).block().getId();
-        sql("INSERT INTO cart_items (item_id, quantity) VALUES (" + id + ", " + quantity + ")").block();
+        sql("INSERT INTO cart_items (user_id, item_id, quantity) VALUES (1, " + id + ", " + quantity + ")").block();
 
-        Runnable minus = () -> service.updateItem(id, CartAction.MINUS).block(Duration.ofSeconds(10));
+        Runnable minus = () -> service.updateItem(TEST_USER_ID, id, CartAction.MINUS).block(Duration.ofSeconds(10));
         RaceTestUtils.race(15, Schedulers.boundedElastic(),
                 Collections.nCopies(quantity, minus).toArray(Runnable[]::new));
 
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .expectComplete()
                 .verify(Duration.ofSeconds(30));
     }
@@ -95,12 +96,12 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
     @RepeatedTest(100)
     void twoConcurrentMinusesRemoveBothUnits() {
         long id = items.save(item("Coffee", "12.50")).block().getId();
-        sql("INSERT INTO cart_items (item_id, quantity) VALUES (" + id + ", 2)").block();
+        sql("INSERT INTO cart_items (user_id, item_id, quantity) VALUES (1, " + id + ", 2)").block();
 
-        Runnable minus = () -> service.updateItem(id, CartAction.MINUS).block(Duration.ofSeconds(10));
+        Runnable minus = () -> service.updateItem(TEST_USER_ID, id, CartAction.MINUS).block(Duration.ofSeconds(10));
         RaceTestUtils.race(15, Schedulers.boundedElastic(), minus, minus);
 
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .expectComplete()
                 .verify(Duration.ofSeconds(30));
     }
@@ -108,13 +109,13 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
     @RepeatedTest(100)
     void concurrentPlusAndMinusPreserveLastUnit() {
         long id = items.save(item("Coffee", "12.50")).block().getId();
-        sql("INSERT INTO cart_items (item_id, quantity) VALUES (" + id + ", 1)").block();
+        sql("INSERT INTO cart_items (user_id, item_id, quantity) VALUES (1, " + id + ", 1)").block();
 
         RaceTestUtils.race(15, Schedulers.boundedElastic(),
-                () -> service.updateItem(id, CartAction.PLUS).block(Duration.ofSeconds(10)),
-                () -> service.updateItem(id, CartAction.MINUS).block(Duration.ofSeconds(10)));
+                () -> service.updateItem(TEST_USER_ID, id, CartAction.PLUS).block(Duration.ofSeconds(10)),
+                () -> service.updateItem(TEST_USER_ID, id, CartAction.MINUS).block(Duration.ofSeconds(10)));
 
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(1))
                 .expectComplete()
                 .verify(Duration.ofSeconds(30));
@@ -126,32 +127,32 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
                 .block()
                 .getId();
 
-        service.updateItem(id, CartAction.MINUS)
+        service.updateItem(TEST_USER_ID, id, CartAction.MINUS)
                 .block();
-        service.updateItem(id, CartAction.PLUS)
-                .then(service.updateItem(id, CartAction.PLUS))
+        service.updateItem(TEST_USER_ID, id, CartAction.PLUS)
+                .then(service.updateItem(TEST_USER_ID, id, CartAction.PLUS))
                 .block();
 
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(2))
                 .verifyComplete();
-        service.updateItem(id, CartAction.MINUS)
+        service.updateItem(TEST_USER_ID, id, CartAction.MINUS)
                 .block();
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(1))
                 .verifyComplete();
-        service.updateItem(id, CartAction.MINUS)
-                .then(service.updateItem(id, CartAction.MINUS))
+        service.updateItem(TEST_USER_ID, id, CartAction.MINUS)
+                .then(service.updateItem(TEST_USER_ID, id, CartAction.MINUS))
                 .block();
-        StepVerifier.create(cart.count())
+        StepVerifier.create(cart.countByUserId(TEST_USER_ID))
                 .expectNext(0L)
                 .verifyComplete();
-        service.updateItem(id, CartAction.PLUS)
-                .then(service.updateItem(id, CartAction.PLUS))
-                .then(service.updateItem(id, CartAction.DELETE))
-                .then(service.updateItem(id, CartAction.DELETE))
+        service.updateItem(TEST_USER_ID, id, CartAction.PLUS)
+                .then(service.updateItem(TEST_USER_ID, id, CartAction.PLUS))
+                .then(service.updateItem(TEST_USER_ID, id, CartAction.DELETE))
+                .then(service.updateItem(TEST_USER_ID, id, CartAction.DELETE))
                 .block();
-        StepVerifier.create(service.getCart())
+        StepVerifier.create(service.getCart(TEST_USER_ID))
                 .assertNext(dto -> {
                     assertThat(dto.items()).isEmpty();
                     assertThat(dto.total()).isZero();
@@ -165,11 +166,11 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
                 .block();
         Item tea = items.save(item("Tea", "3.25"))
                 .block();
-        service.updateItem(tea.getId(), CartAction.PLUS)
-                .then(service.updateItem(coffee.getId(), CartAction.PLUS))
-                .then(service.updateItem(coffee.getId(), CartAction.PLUS))
+        service.updateItem(TEST_USER_ID, tea.getId(), CartAction.PLUS)
+                .then(service.updateItem(TEST_USER_ID, coffee.getId(), CartAction.PLUS))
+                .then(service.updateItem(TEST_USER_ID, coffee.getId(), CartAction.PLUS))
                 .block();
-        StepVerifier.create(service.getCart())
+        StepVerifier.create(service.getCart(TEST_USER_ID))
                 .assertNext(dto -> {
                     assertThat(dto.total()).isEqualByComparingTo("28.25");
                     assertThat(dto.items())
@@ -180,7 +181,7 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
         coffee.setPrice(new BigDecimal("20.00"));
         items.save(coffee)
                 .block();
-        StepVerifier.create(service.getCart())
+        StepVerifier.create(service.getCart(TEST_USER_ID))
                 .assertNext(dto -> {
                     assertThat(dto.total()).isEqualByComparingTo("28.25");
                     assertThat(dto.items())
@@ -195,7 +196,7 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
 
         // Direct database edits become visible after the cached product is evicted or expires.
         redis.execute(connection -> connection.serverCommands().flushDb()).then().block();
-        StepVerifier.create(service.getCart())
+        StepVerifier.create(service.getCart(TEST_USER_ID))
                 .assertNext(dto -> {
                     assertThat(dto.total()).isEqualByComparingTo("43.25");
                     assertThat(dto.items())
@@ -214,12 +215,12 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
         long id = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
-        service.updateItem(id, CartAction.PLUS)
+        service.updateItem(TEST_USER_ID, id, CartAction.PLUS)
                 .block();
-        StepVerifier.create(service.updateItem(Long.MAX_VALUE, CartAction.PLUS))
+        StepVerifier.create(service.updateItem(TEST_USER_ID, Long.MAX_VALUE, CartAction.PLUS))
                 .expectError(NotFoundException.class)
                 .verify();
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(1))
                 .verifyComplete();
     }
@@ -229,14 +230,14 @@ class CartServiceIntegrationTest extends IntegrationTestSupport {
         long id = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
-        service.updateItem(id, CartAction.PLUS)
+        service.updateItem(TEST_USER_ID, id, CartAction.PLUS)
                 .block();
         sql("UPDATE cart_items SET quantity = 2147483647 WHERE item_id = " + id)
                 .block();
-        StepVerifier.create(service.updateItem(id, CartAction.PLUS))
+        StepVerifier.create(service.updateItem(TEST_USER_ID, id, CartAction.PLUS))
                 .expectError(DataAccessException.class)
                 .verify();
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(Integer.MAX_VALUE))
                 .verifyComplete();
     }

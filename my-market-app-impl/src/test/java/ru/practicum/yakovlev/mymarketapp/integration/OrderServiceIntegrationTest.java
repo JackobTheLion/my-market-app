@@ -31,6 +31,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
@@ -54,12 +55,12 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         Duration timeout = Duration.ofSeconds(10);
         long coffeeId = items.save(item("Coffee", "12.50")).block(timeout).getId();
         long teaId = items.save(item("Tea", "3.25")).block(timeout).getId();
-        cart.updateItem(teaId, CartAction.PLUS)
-                .then(cart.updateItem(coffeeId, CartAction.PLUS))
-                .then(cart.updateItem(coffeeId, CartAction.PLUS))
+        cart.updateItem(TEST_USER_ID, teaId, CartAction.PLUS)
+                .then(cart.updateItem(TEST_USER_ID, coffeeId, CartAction.PLUS))
+                .then(cart.updateItem(TEST_USER_ID, coffeeId, CartAction.PLUS))
                 .block(timeout);
         Queue<Signal<Long>> results = new ConcurrentLinkedQueue<>();
-        Runnable checkout = () -> results.add(service.createOrder()
+        Runnable checkout = () -> results.add(service.createOrder(TEST_USER_ID)
                 .materialize()
                 .block(timeout));
         RaceTestUtils.race(15, Schedulers.boundedElastic(), checkout, checkout);
@@ -75,14 +76,14 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
                         assertThat(signal.getThrowable()).isInstanceOf(EmptyCartException.class));
 
         long orderId = results.stream().filter(Signal::isOnNext).findFirst().orElseThrow().get();
-        OrderDto order = service.getOrder(orderId).block(timeout);
+        OrderDto order = service.getOrder(TEST_USER_ID, orderId).block(timeout);
         assertThat(order.items())
                 .extracting(OrderItemDto::id, OrderItemDto::count)
                 .containsExactly(tuple(coffeeId, 2), tuple(teaId, 1));
         assertThat(order.totalSum()).isEqualByComparingTo("28.25");
         assertThat(orders.count().block(timeout)).isEqualTo(1L);
         assertThat(positions.count().block(timeout)).isEqualTo(2L);
-        assertThat(cartItems.count().block(timeout)).isZero();
+        assertThat(cartItems.countByUserId(TEST_USER_ID).block(timeout)).isZero();
     }
 
     @RepeatedTest(value = 100, failureThreshold = 1)
@@ -105,27 +106,27 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         long coffeeId = items.save(item("Coffee", "12.50")).block(timeout).getId();
         Long teaId = twoItems ? items.save(item("Tea", "3.25")).block(timeout).getId() : null;
         if (twoItems) {
-            cart.updateItem(teaId, CartAction.PLUS).block(timeout);
+            cart.updateItem(TEST_USER_ID, teaId, CartAction.PLUS).block(timeout);
         }
-        cart.updateItem(coffeeId, CartAction.PLUS).block(timeout);
+        cart.updateItem(TEST_USER_ID, coffeeId, CartAction.PLUS).block(timeout);
         if (action == CartAction.MINUS) {
-            cart.updateItem(coffeeId, CartAction.PLUS).block(timeout);
+            cart.updateItem(TEST_USER_ID, coffeeId, CartAction.PLUS).block(timeout);
         }
         AtomicReference<Long> orderId = new AtomicReference<>();
 
         RaceTestUtils.race(15, Schedulers.boundedElastic(),
-                () -> cart.updateItem(coffeeId, action).block(timeout),
-                () -> orderId.set(service.createOrder().block(timeout)));
+                () -> cart.updateItem(TEST_USER_ID, coffeeId, action).block(timeout),
+                () -> orderId.set(service.createOrder(TEST_USER_ID).block(timeout)));
 
-        OrderDto order = service.getOrder(orderId.get()).block(timeout);
+        OrderDto order = service.getOrder(TEST_USER_ID, orderId.get()).block(timeout);
         assertThat(order.items()).extracting(OrderItemDto::id)
                 .containsExactlyElementsOf(twoItems ? List.of(coffeeId, teaId) : List.of(coffeeId));
         int purchasedQuantity = order.items().getFirst().count();
         assertThat(purchasedQuantity).isIn(1, 2);
         int remainingQuantity = action == CartAction.PLUS ? 2 - purchasedQuantity : 0;
-        assertThat(cartItems.findById(coffeeId).map(entry -> entry.getQuantity())
+        assertThat(cartItems.findItem(TEST_USER_ID, coffeeId).map(entry -> entry.getQuantity())
                 .defaultIfEmpty(0).block(timeout)).isEqualTo(remainingQuantity);
-        assertThat(cartItems.count().block(timeout)).isEqualTo(remainingQuantity > 0 ? 1L : 0L);
+        assertThat(cartItems.countByUserId(TEST_USER_ID).block(timeout)).isEqualTo(remainingQuantity > 0 ? 1L : 0L);
         if (twoItems) {
             assertThat(order.items().get(1).count()).isEqualTo(1);
         }
@@ -141,23 +142,23 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         Duration timeout = Duration.ofSeconds(10);
         long coffeeId = items.save(item("Coffee", "12.50")).block(timeout).getId();
         long teaId = items.save(item("Tea", "3.25")).block(timeout).getId();
-        cart.updateItem(teaId, CartAction.PLUS)
-                .then(cart.updateItem(coffeeId, CartAction.PLUS))
+        cart.updateItem(TEST_USER_ID, teaId, CartAction.PLUS)
+                .then(cart.updateItem(TEST_USER_ID, coffeeId, CartAction.PLUS))
                 .block(timeout);
         AtomicReference<Long> orderId = new AtomicReference<>();
 
         RaceTestUtils.race(15, Schedulers.boundedElastic(),
-                () -> cart.updateItem(coffeeId, CartAction.DELETE).block(timeout),
-                () -> orderId.set(service.createOrder().block(timeout)));
+                () -> cart.updateItem(TEST_USER_ID, coffeeId, CartAction.DELETE).block(timeout),
+                () -> orderId.set(service.createOrder(TEST_USER_ID).block(timeout)));
 
-        OrderDto order = service.getOrder(orderId.get()).block(timeout);
+        OrderDto order = service.getOrder(TEST_USER_ID, orderId.get()).block(timeout);
         assertThat(order.items()).extracting(OrderItemDto::id)
                 .isIn(List.of(teaId), List.of(coffeeId, teaId));
         assertThat(order.items()).extracting(OrderItemDto::count).containsOnly(1);
         assertThat(order.totalSum()).isEqualByComparingTo(order.items().size() == 2 ? "15.75" : "3.25");
         assertThat(orders.count().block(timeout)).isEqualTo(1L);
         assertThat(positions.count().block(timeout)).isEqualTo((long) order.items().size());
-        assertThat(cartItems.count().block(timeout)).isZero();
+        assertThat(cartItems.countByUserId(TEST_USER_ID).block(timeout)).isZero();
     }
 
     @Test
@@ -166,11 +167,11 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
                 .block();
         Item tea = items.save(item("Tea", "3.25"))
                 .block();
-        cart.updateItem(coffee.getId(), CartAction.PLUS)
-                .then(cart.updateItem(coffee.getId(), CartAction.PLUS))
-                .then(cart.updateItem(tea.getId(), CartAction.PLUS))
+        cart.updateItem(TEST_USER_ID, coffee.getId(), CartAction.PLUS)
+                .then(cart.updateItem(TEST_USER_ID, coffee.getId(), CartAction.PLUS))
+                .then(cart.updateItem(TEST_USER_ID, tea.getId(), CartAction.PLUS))
                 .block();
-        long id = service.createOrder()
+        long id = service.createOrder(TEST_USER_ID)
                 .block();
         StepVerifier.create(orders.count())
                 .expectNext(1L)
@@ -178,10 +179,10 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         StepVerifier.create(positions.count())
                 .expectNext(2L)
                 .verifyComplete();
-        StepVerifier.create(cartItems.count())
+        StepVerifier.create(cartItems.countByUserId(TEST_USER_ID))
                 .expectNext(0L)
                 .verifyComplete();
-        StepVerifier.create(service.getOrder(id))
+        StepVerifier.create(service.getOrder(TEST_USER_ID, id))
                 .assertNext(dto -> {
                     assertThat(dto.items())
                             .extracting(OrderItemDto::id)
@@ -198,16 +199,16 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
     void catalogEditsLeaveSnapshotUnchanged() {
         Item coffee = items.save(item("Coffee", "12.50"))
                 .block();
-        cart.updateItem(coffee.getId(), CartAction.PLUS)
+        cart.updateItem(TEST_USER_ID, coffee.getId(), CartAction.PLUS)
                 .block();
-        long id = service.createOrder()
+        long id = service.createOrder(TEST_USER_ID)
                 .block();
         coffee.setTitle("Changed");
         coffee.setPrice(new BigDecimal("99.00"));
         coffee.setImagePath("changed/photo.jpg");
         items.save(coffee)
                 .block();
-        StepVerifier.create(service.getOrder(id))
+        StepVerifier.create(service.getOrder(TEST_USER_ID, id))
                 .assertNext(dto -> {
                     assertThat(dto.items().getFirst().title()).isEqualTo("Coffee");
                     assertThat(dto.items().getFirst().price()).isEqualByComparingTo("12.50");
@@ -219,7 +220,7 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
 
     @Test
     void emptyCartDoesNotCreateOrder() {
-        StepVerifier.create(service.createOrder())
+        StepVerifier.create(service.createOrder(TEST_USER_ID))
                 .expectError(EmptyCartException.class)
                 .verify();
         StepVerifier.create(orders.count())
@@ -235,17 +236,17 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         long itemId = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
-        cart.updateItem(itemId, CartAction.PLUS)
+        cart.updateItem(TEST_USER_ID, itemId, CartAction.PLUS)
                 .block();
-        long first = service.createOrder()
+        long first = service.createOrder(TEST_USER_ID)
                 .block();
-        cart.updateItem(itemId, CartAction.PLUS)
+        cart.updateItem(TEST_USER_ID, itemId, CartAction.PLUS)
                 .block();
-        long second = service.createOrder()
+        long second = service.createOrder(TEST_USER_ID)
                 .block();
         sql("UPDATE orders SET created_at = timestamp '2025-01-01 00:00:00'")
                 .block();
-        StepVerifier.create(service.getOrders())
+        StepVerifier.create(service.getOrders(TEST_USER_ID))
                 .assertNext(page -> {
                     assertThat(page.orders())
                             .extracting(OrderDto::id)
@@ -253,7 +254,7 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
                     assertThat(page.totalSum()).isEqualByComparingTo("25.00");
                 })
                 .verifyComplete();
-        StepVerifier.create(service.getOrder(Long.MAX_VALUE))
+        StepVerifier.create(service.getOrder(TEST_USER_ID, Long.MAX_VALUE))
                 .expectError(NotFoundException.class)
                 .verify();
     }
@@ -264,7 +265,7 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         long id = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
-        cart.updateItem(id, CartAction.PLUS)
+        cart.updateItem(TEST_USER_ID, id, CartAction.PLUS)
                 .block();
         sql("""
                 CREATE FUNCTION reject_cart_delete() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -275,7 +276,7 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         try {
             sql("CREATE TRIGGER reject_cart_delete BEFORE DELETE ON cart_items FOR EACH ROW EXECUTE FUNCTION reject_cart_delete()")
                     .block();
-            StepVerifier.create(service.createOrder())
+            StepVerifier.create(service.createOrder(TEST_USER_ID))
                     .expectErrorSatisfies(error ->
                             assertThat(error)
                                     .isInstanceOf(skipDelete ? IllegalStateException.class : DataAccessException.class)
@@ -289,7 +290,7 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
             StepVerifier.create(positions.count())
                     .expectNext(0L)
                     .verifyComplete();
-            StepVerifier.create(cartItems.findById(id))
+            StepVerifier.create(cartItems.findItem(TEST_USER_ID, id))
                     .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(1))
                     .verifyComplete();
         } finally {
@@ -304,7 +305,7 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         long id = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
-        cart.updateItem(id, CartAction.PLUS)
+        cart.updateItem(TEST_USER_ID, id, CartAction.PLUS)
                 .block();
         sql("""
                 CREATE FUNCTION reject_order_item() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -315,13 +316,13 @@ class OrderServiceIntegrationTest extends IntegrationTestSupport {
         try {
             sql("CREATE TRIGGER reject_order_item BEFORE INSERT ON order_items FOR EACH ROW EXECUTE FUNCTION reject_order_item()")
                     .block();
-            StepVerifier.create(service.createOrder())
+            StepVerifier.create(service.createOrder(TEST_USER_ID))
                     .expectError(DataAccessException.class)
                     .verify();
             StepVerifier.create(orders.count())
                     .expectNext(0L)
                     .verifyComplete();
-            StepVerifier.create(cartItems.count())
+            StepVerifier.create(cartItems.countByUserId(TEST_USER_ID))
                     .expectNext(1L)
                     .verifyComplete();
         } finally {

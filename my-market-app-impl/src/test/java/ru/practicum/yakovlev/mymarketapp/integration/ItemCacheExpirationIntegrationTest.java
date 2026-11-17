@@ -12,6 +12,7 @@ import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
 import java.time.Duration;
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
@@ -24,14 +25,14 @@ class ItemCacheExpirationIntegrationTest extends IntegrationTestSupport {
     @Test
     void expiredCardPageAndCartReloadProductFromDatabase() {
         long id = items.save(item("Coffee", "12.50")).block().getId();
-        cart.updateItem(id, CartAction.PLUS).block();
-        catalog.getItem(id).block();
-        catalog.getItems("", ItemSort.NO, 1, 10).block();
-        cart.getCart().block();
+        cart.updateItem(TEST_USER_ID, id, CartAction.PLUS).block();
+        catalog.getItem(TEST_USER_ID, id).block();
+        catalog.getItems(TEST_USER_ID, "", ItemSort.NO, 1, 10).block();
+        cart.getCart(TEST_USER_ID).block();
         sql("UPDATE items SET title = 'Changed', price = 99 WHERE id = " + id).block();
         Mono.delay(Duration.ofMillis(1200)).block();
-        assertThat(catalog.getItem(id).block().title()).isEqualTo("Changed");
-        assertThat(catalog.getItems("", ItemSort.NO, 1, 10).block().items().getFirst().title()).isEqualTo("Changed");
-        assertThat(cart.getCart().block().total()).isEqualByComparingTo("99.00");
+        assertThat(catalog.getItem(TEST_USER_ID, id).block().title()).isEqualTo("Changed");
+        assertThat(catalog.getItems(TEST_USER_ID, "", ItemSort.NO, 1, 10).block().items().getFirst().title()).isEqualTo("Changed");
+        assertThat(cart.getCart(TEST_USER_ID).block().total()).isEqualByComparingTo("99.00");
     }
 }

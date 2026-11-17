@@ -4,6 +4,9 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 
 public interface PaymentGateway {
-    Mono<BigDecimal> getBalance();
-    Mono<Void> pay(BigDecimal amount);
+
+    Mono<BigDecimal> getBalance(long userId);
+
+    Mono<Void> pay(long userId, BigDecimal amount);
+
 }

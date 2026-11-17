@@ -12,9 +12,9 @@ import java.util.Map;
 
 public interface ItemService {
 
-    Mono<ItemPageDto> getItems(String search, ItemSort sort, int pageNumber, int pageSize);
+    Mono<ItemPageDto> getItems(Long userId, String search, ItemSort sort, int pageNumber, int pageSize);
 
-    Mono<ItemDto> getItem(long id);
+    Mono<ItemDto> getItem(Long userId, long id);
 
     Mono<Map<Long, Item>> getItemsByIds(List<Long> ids);
 

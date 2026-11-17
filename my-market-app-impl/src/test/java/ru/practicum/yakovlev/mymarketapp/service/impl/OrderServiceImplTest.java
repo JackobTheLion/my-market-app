@@ -26,6 +26,7 @@ import ru.practicum.yakovlev.mymarketapp.repository.OrderRepository;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
@@ -47,9 +48,9 @@ class OrderServiceImplTest {
 
     @Test
     void savesSnapshotBeforeDeletingCart() {
-        when(paymentGateway.pay(any())).thenReturn(Mono.empty());
+        when(paymentGateway.pay(anyLong(), any())).thenReturn(Mono.empty());
         Item coffee = item(1, "Coffee", "12.50");
-        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(coffee, 2)));
+        when(cartItemRepository.findAllWithItemsForUpdate(TEST_USER_ID)).thenReturn(Flux.just(new CartItem(coffee, 2)));
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> {
                     Order order = invocation.getArgument(0);
@@ -72,11 +73,11 @@ class OrderServiceImplTest {
                                     .thenMany(Flux.empty()));
                 });
         AtomicBoolean cartDeleted = new AtomicBoolean();
-        when(cartItemRepository.deletePurchasedItems(List.of(1L))).thenReturn(Mono.fromSupplier(() -> {
+        when(cartItemRepository.deletePurchasedItems(TEST_USER_ID, List.of(1L))).thenReturn(Mono.fromSupplier(() -> {
             cartDeleted.set(true);
             return 1;
         }));
-        StepVerifier.create(service.createOrder())
+        StepVerifier.create(service.createOrder(TEST_USER_ID))
                 .then(() -> {
                     assertThat(cartDeleted).isFalse();
                     positionsSaved.tryEmitEmpty();
@@ -85,65 +86,65 @@ class OrderServiceImplTest {
                 .expectComplete()
                 .verify(java.time.Duration.ofSeconds(5));
         assertThat(cartDeleted).isTrue();
-        verify(paymentGateway).pay(argThat(amount -> amount.compareTo(new java.math.BigDecimal("25.00")) == 0));
+        verify(paymentGateway).pay(eq(TEST_USER_ID), argThat(amount -> amount.compareTo(new java.math.BigDecimal("25.00")) == 0));
         verify(cartItemRepository, never())
-                .findAll();
+                .findAllByUserId(TEST_USER_ID);
     }
 
     @Test
     void emptyCartEmitsErrorWithoutSaving() {
-        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.empty());
-        StepVerifier.create(service.createOrder())
+        when(cartItemRepository.findAllWithItemsForUpdate(TEST_USER_ID)).thenReturn(Flux.empty());
+        StepVerifier.create(service.createOrder(TEST_USER_ID))
                 .expectError(EmptyCartException.class)
                 .verify();
         verifyNoInteractions(orderRepository, orderItemRepository, paymentGateway);
         verify(cartItemRepository, never())
-                .deletePurchasedItems(anyList());
+                .deletePurchasedItems(eq(TEST_USER_ID), anyList());
     }
 
     @Test
     void failedSaveDoesNotDeleteCart() {
-        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
+        when(cartItemRepository.findAllWithItemsForUpdate(TEST_USER_ID)).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
         when(orderRepository.save(any(Order.class))).thenReturn(Mono.error(new DataIntegrityViolationException("failed")));
-        StepVerifier.create(service.createOrder())
+        StepVerifier.create(service.createOrder(TEST_USER_ID))
                 .expectError(DataIntegrityViolationException.class)
                 .verify();
         verify(cartItemRepository, never())
-                .deletePurchasedItems(anyList());
+                .deletePurchasedItems(eq(TEST_USER_ID), anyList());
     }
 
     @Test
     void failedPositionsAreNeverPaid() {
-        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
+        when(cartItemRepository.findAllWithItemsForUpdate(TEST_USER_ID)).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             order.setId(42L);
             return Mono.just(order);
         });
         when(orderItemRepository.saveAll(anyIterable())).thenReturn(Flux.error(new DataIntegrityViolationException("positions failed")));
-        when(cartItemRepository.deletePurchasedItems(anyList())).thenReturn(Mono.just(1));
-        StepVerifier.create(service.createOrder()).expectError(DataIntegrityViolationException.class).verify();
+        when(cartItemRepository.deletePurchasedItems(eq(TEST_USER_ID), anyList())).thenReturn(Mono.just(1));
+        StepVerifier.create(service.createOrder(TEST_USER_ID)).expectError(DataIntegrityViolationException.class).verify();
         verifyNoInteractions(paymentGateway);
     }
 
     @Test
     void incompleteCartCleanupIsNeverPaid() {
-        when(cartItemRepository.findAllWithItemsForUpdate()).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
+        when(cartItemRepository.findAllWithItemsForUpdate(TEST_USER_ID)).thenReturn(Flux.just(new CartItem(item(1, "Coffee", "12.50"), 1)));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             order.setId(42L);
             return Mono.just(order);
         });
         when(orderItemRepository.saveAll(anyIterable())).thenReturn(Flux.empty());
-        when(cartItemRepository.deletePurchasedItems(anyList())).thenReturn(Mono.just(0));
-        StepVerifier.create(service.createOrder()).expectError(IllegalStateException.class).verify();
+        when(cartItemRepository.deletePurchasedItems(eq(TEST_USER_ID), anyList())).thenReturn(Mono.just(0));
+        StepVerifier.create(service.createOrder(TEST_USER_ID)).expectError(IllegalStateException.class).verify();
         verifyNoInteractions(paymentGateway);
     }
 
     @Test
     void emptyHistoryHasZeroTotal() {
-        when(orderRepository.findAllByOrderByCreatedAtDescIdDesc()).thenReturn(Flux.empty());
-        StepVerifier.create(service.getOrders())
+        when(orderRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(TEST_USER_ID)).thenReturn(Flux.empty());
+        StepVerifier.create(service.getOrders(TEST_USER_ID))
                 .assertNext(page -> {
                     assertThat(page.orders()).isEmpty();
                     assertThat(page.totalSum()).isZero();
@@ -153,26 +154,26 @@ class OrderServiceImplTest {
 
     @Test
     void historyLoadsPositionsOnceAndGroupsThemWithoutChangingOrder() {
-        Order oldest = new Order();
+        Order oldest = new Order(TEST_USER_ID);
         oldest.setId(41L);
-        Order newer = new Order();
+        Order newer = new Order(TEST_USER_ID);
         newer.setId(42L);
-        Order empty = new Order();
+        Order empty = new Order(TEST_USER_ID);
         empty.setId(43L);
         Item coffee = item(1, "Coffee", "12.50");
         Item tea = item(2, "Tea", "3.25");
         OrderItem oldestCoffee = new OrderItem(oldest, coffee, 1);
         OrderItem oldestTea = new OrderItem(oldest, tea, 2);
         OrderItem newerCoffee = new OrderItem(newer, coffee, 2);
-        when(orderRepository.findAllByOrderByCreatedAtDescIdDesc()).thenReturn(Flux.just(empty, newer, oldest));
-        when(orderItemRepository.findAllByOrderByOrderIdAsc()).thenReturn(Flux.just(oldestCoffee, oldestTea, newerCoffee));
+        when(orderRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(TEST_USER_ID)).thenReturn(Flux.just(empty, newer, oldest));
+        when(orderItemRepository.findAllByUserId(TEST_USER_ID)).thenReturn(Flux.just(oldestCoffee, oldestTea, newerCoffee));
         when(orderMapper.toDto(any(Order.class)))
                 .thenAnswer(invocation -> {
                     Order order = invocation.getArgument(0);
                     return new OrderDto(order.getId(), List.of(), order.getTotalSum());
                 });
 
-        StepVerifier.create(service.getOrders())
+        StepVerifier.create(service.getOrders(TEST_USER_ID))
                 .assertNext(page -> {
                     assertThat(page.orders())
                             .extracting(OrderDto::id)
@@ -184,15 +185,15 @@ class OrderServiceImplTest {
                 })
                 .verifyComplete();
         verify(orderItemRepository, times(1))
-                .findAllByOrderByOrderIdAsc();
+                .findAllByUserId(TEST_USER_ID);
         verify(orderItemRepository, never())
                 .findAllByOrderIdOrderByIdAsc(anyLong());
     }
 
     @Test
     void missingOrderEmitsNotFound() {
-        when(orderRepository.findById(99L)).thenReturn(Mono.empty());
-        StepVerifier.create(service.getOrder(99))
+        when(orderRepository.findByIdAndUserId(99L, TEST_USER_ID)).thenReturn(Mono.empty());
+        StepVerifier.create(service.getOrder(TEST_USER_ID, 99))
                 .expectError(NotFoundException.class)
                 .verify();
         verifyNoInteractions(orderMapper, orderItemRepository);

@@ -6,6 +6,7 @@ import reactor.test.StepVerifier;
 import ru.practicum.yakovlev.mymarketapp.model.Item;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
@@ -18,11 +19,11 @@ class CartItemRepositoryTest extends IntegrationTestSupport {
     @Test
     void assignedItemIdUpsertInsertsAndThenIncrements() {
         long id = items.save(item("Coffee", "12.50")).block().getId();
-        cart.increment(id)
-                .then(cart.increment(id))
+        cart.increment(TEST_USER_ID, id)
+                .then(cart.increment(TEST_USER_ID, id))
                 .block();
 
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> {
                     assertThat(entry.getItemId()).isEqualTo(id);
                     assertThat(entry.getQuantity()).isEqualTo(2);
@@ -34,19 +35,19 @@ class CartItemRepositoryTest extends IntegrationTestSupport {
     @Test
     void minusSqlNeverCreatesZeroQuantity() {
         long id = items.save(item("Coffee", "12.50")).block().getId();
-        cart.increment(id)
-                .then(cart.increment(id))
+        cart.increment(TEST_USER_ID, id)
+                .then(cart.increment(TEST_USER_ID, id))
                 .block();
-        StepVerifier.create(cart.deleteLast(id))
+        StepVerifier.create(cart.deleteLast(TEST_USER_ID, id))
                 .expectNext(0)
                 .verifyComplete();
-        StepVerifier.create(cart.decrement(id))
+        StepVerifier.create(cart.decrement(TEST_USER_ID, id))
                 .expectNext(1)
                 .verifyComplete();
-        StepVerifier.create(cart.deleteLast(id))
+        StepVerifier.create(cart.deleteLast(TEST_USER_ID, id))
                 .expectNext(1)
                 .verifyComplete();
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .verifyComplete();
     }
 
@@ -58,12 +59,12 @@ class CartItemRepositoryTest extends IntegrationTestSupport {
         tea.setImagePath(null);
         Item savedTea = items.save(tea)
                 .block();
-        cart.increment(savedTea.getId())
-                .then(cart.increment(coffee.getId()))
-                .then(cart.increment(coffee.getId()))
+        cart.increment(TEST_USER_ID, savedTea.getId())
+                .then(cart.increment(TEST_USER_ID, coffee.getId()))
+                .then(cart.increment(TEST_USER_ID, coffee.getId()))
                 .block();
 
-        StepVerifier.create(cart.findAllWithItems())
+        StepVerifier.create(cart.findAllWithItems(TEST_USER_ID))
                 .assertNext(entry -> {
                     assertThat(entry.getItemId()).isEqualTo(coffee.getId());
                     assertThat(entry.getQuantity()).isEqualTo(2);

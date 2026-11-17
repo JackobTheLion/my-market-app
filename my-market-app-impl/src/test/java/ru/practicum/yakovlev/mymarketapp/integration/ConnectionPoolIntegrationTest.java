@@ -15,6 +15,7 @@ import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
 import java.time.Duration;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -41,11 +42,11 @@ class ConnectionPoolIntegrationTest extends IntegrationTestSupport {
                 INSERT INTO items (title, description, price)
                 SELECT 'Product ' || position, '', 1.00 FROM generate_series(1, 500) AS position
                 """)
-                .then(sql("INSERT INTO cart_items (item_id, quantity) SELECT id, 2 FROM items"))
+                .then(sql("INSERT INTO cart_items (user_id, item_id, quantity) SELECT 1, id, 2 FROM items"))
                 .block();
 
         StepVerifier.create(Flux.range(0, CONCURRENT_READS)
-                        .flatMap(ignored -> itemService.getItems(null, ItemSort.NO, 1, POSITIONS), CONCURRENT_READS)
+                        .flatMap(ignored -> itemService.getItems(TEST_USER_ID, null, ItemSort.NO, 1, POSITIONS), CONCURRENT_READS)
                         .collectList())
                 .assertNext(pages -> {
                     assertThat(pages).hasSize(CONCURRENT_READS);
@@ -67,18 +68,18 @@ class ConnectionPoolIntegrationTest extends IntegrationTestSupport {
                 INSERT INTO items (title, description, price)
                 SELECT 'Product ' || position, '', 1.00 FROM generate_series(1, 500) AS position
                 """)
-                .then(sql("INSERT INTO cart_items (item_id, quantity) SELECT id, 1 FROM items"))
+                .then(sql("INSERT INTO cart_items (user_id, item_id, quantity) SELECT 1, id, 1 FROM items"))
                 .block();
 
-        StepVerifier.create(orderService.createOrder()
-                        .flatMap(orderService::getOrder))
+        StepVerifier.create(orderService.createOrder(TEST_USER_ID)
+                        .flatMap(orderId -> orderService.getOrder(TEST_USER_ID, orderId)))
                 .assertNext(order -> {
                     assertThat(order.items()).hasSize(POSITIONS);
                     assertThat(order.totalSum()).isEqualByComparingTo("500.00");
                 })
                 .expectComplete()
                 .verify(Duration.ofSeconds(45));
-        StepVerifier.create(cartService.getCart())
+        StepVerifier.create(cartService.getCart(TEST_USER_ID))
                 .assertNext(cart -> assertThat(cart.items()).isEmpty())
                 .expectComplete()
                 .verify(Duration.ofSeconds(5));
@@ -90,12 +91,12 @@ class ConnectionPoolIntegrationTest extends IntegrationTestSupport {
                 INSERT INTO items (title, description, price)
                 SELECT 'Product ' || position, '', 1.00 FROM generate_series(1, 500) AS position
                 """)
-                .then(sql("INSERT INTO cart_items (item_id, quantity) SELECT id, 1 FROM items"))
+                .then(sql("INSERT INTO cart_items (user_id, item_id, quantity) SELECT 1, id, 1 FROM items"))
                 .block();
 
         // The cart and its items are loaded with one JOIN, so one connection must suffice.
         StepVerifier.create(Flux.range(0, CONCURRENT_READS)
-                        .flatMap(ignored -> cartService.getCart(), CONCURRENT_READS)
+                        .flatMap(ignored -> cartService.getCart(TEST_USER_ID), CONCURRENT_READS)
                         .collectList())
                 .assertNext(carts -> {
                     assertThat(carts).hasSize(CONCURRENT_READS);
@@ -115,9 +116,9 @@ class ConnectionPoolIntegrationTest extends IntegrationTestSupport {
     void concurrentHistoryReadsCompleteWithOnlyOneConnection() {
         sql("INSERT INTO items (title, description, price) VALUES ('Product', '', 1.00)")
                 .then(sql("""
-                        INSERT INTO orders (created_at)
-                        SELECT CURRENT_TIMESTAMP FROM generate_series(1, 500)
-                        """))
+                        INSERT INTO orders (created_at, user_id)
+                        SELECT CURRENT_TIMESTAMP, %d FROM generate_series(1, 500)
+                        """.formatted(TEST_USER_ID)))
                 .then(sql("""
                         INSERT INTO order_items (order_id, item_id, title, price, quantity)
                         SELECT orders.id, items.id, items.title, items.price, 1 FROM orders CROSS JOIN items
@@ -125,7 +126,7 @@ class ConnectionPoolIntegrationTest extends IntegrationTestSupport {
                 .block();
 
         StepVerifier.create(Flux.range(0, CONCURRENT_READS)
-                        .flatMap(ignored -> orderService.getOrders(), CONCURRENT_READS)
+                        .flatMap(ignored -> orderService.getOrders(TEST_USER_ID), CONCURRENT_READS)
                         .collectList())
                 .assertNext(pages -> {
                     assertThat(pages).hasSize(CONCURRENT_READS);

@@ -4,7 +4,7 @@ import reactor.core.publisher.Flux;
 import ru.practicum.yakovlev.mymarketapp.model.CartItem;
 
 public interface CartItemRepositoryCustom {
-    Flux<CartItem> findAllWithItems();
+    Flux<CartItem> findAllWithItems(long userId);
 
-    Flux<CartItem> findAllWithItemsForUpdate();
+    Flux<CartItem> findAllWithItemsForUpdate(long userId);
 }

@@ -7,6 +7,7 @@ import reactor.test.StepVerifier;
 import ru.practicum.yakovlev.mymarketapp.model.Order;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
 class PositiveValueConstraintTest extends IntegrationTestSupport {
@@ -27,7 +28,7 @@ class PositiveValueConstraintTest extends IntegrationTestSupport {
         long id = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
-        StepVerifier.create(sql("INSERT INTO cart_items (item_id, quantity) VALUES (" + id + ", 0)"))
+        StepVerifier.create(sql("INSERT INTO cart_items (user_id, item_id, quantity) VALUES (1, " + id + ", 0)"))
                 .expectError(DataIntegrityViolationException.class)
                 .verify();
     }
@@ -37,7 +38,7 @@ class PositiveValueConstraintTest extends IntegrationTestSupport {
         long itemId = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
-        long orderId = orders.save(new Order())
+        long orderId = orders.save(new Order(TEST_USER_ID))
                 .block()
                 .getId();
         String prefix = "INSERT INTO order_items (order_id, item_id, title, price, quantity) VALUES ("
@@ -52,13 +53,13 @@ class PositiveValueConstraintTest extends IntegrationTestSupport {
 
     @Test
     void foreignKeysAndUniqueOrderPositionAreEnforced() {
-        StepVerifier.create(sql("INSERT INTO cart_items (item_id, quantity) VALUES (9223372036854775807, 1)"))
+        StepVerifier.create(sql("INSERT INTO cart_items (user_id, item_id, quantity) VALUES (1, 9223372036854775807, 1)"))
                 .expectError(DataIntegrityViolationException.class)
                 .verify();
         long itemId = items.save(item("Coffee", "12.50"))
                 .block()
                 .getId();
-        long orderId = orders.save(new Order())
+        long orderId = orders.save(new Order(TEST_USER_ID))
                 .block()
                 .getId();
         String insert = "INSERT INTO order_items (order_id, item_id, title, price, quantity) VALUES ("

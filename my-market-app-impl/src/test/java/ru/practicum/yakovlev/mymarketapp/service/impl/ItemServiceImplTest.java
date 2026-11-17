@@ -33,6 +33,7 @@ import ru.practicum.yakovlev.mymarketapp.cache.CachedItemPage;
 import java.util.List;
 import java.util.Map;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -63,7 +64,7 @@ class ItemServiceImplTest {
     @ValueSource(strings = {"  ", "\t\n"})
     void blankSearchReturnsEmptyCatalog(String search) {
         when(cache.findPage("", ItemSort.NO, 1, 10)).thenReturn(Mono.just(new CachedItemPage(List.of(), 0)));
-        StepVerifier.create(service.getItems(search, ItemSort.NO, 1, 10))
+        StepVerifier.create(service.getItems(TEST_USER_ID, search, ItemSort.NO, 1, 10))
                 .assertNext(page -> {
                     assertThat(page.items()).isEmpty();
                     assertThat(page.paging()).isEqualTo(new PagingDto(10, 1, false, false));
@@ -77,8 +78,8 @@ class ItemServiceImplTest {
         Item coffee = item(1, "Coffee", "12.50");
         when(cache.findPage("Coffee", ItemSort.PRICE, 2, 10))
                 .thenReturn(Mono.just(new CachedItemPage(List.of(CachedItem.from(coffee)), 25)));
-        when(cart.findAllById(List.of(1L))).thenReturn(Flux.just(new CartItem(coffee, 4)));
-        StepVerifier.create(service.getItems("  Coffee  ", ItemSort.PRICE, 2, 10))
+        when(cart.findAllByUserIdAndItemIds(TEST_USER_ID, List.of(1L))).thenReturn(Flux.just(new CartItem(coffee, 4)));
+        StepVerifier.create(service.getItems(TEST_USER_ID, "  Coffee  ", ItemSort.PRICE, 2, 10))
                 .assertNext(page -> {
                     assertThat(page.paging()).isEqualTo(new PagingDto(10, 2, true, true));
                     assertThat(page.items().getFirst().count()).isEqualTo(4);
@@ -91,8 +92,8 @@ class ItemServiceImplTest {
         Item coffee = item(1, "Coffee", "12.50");
         coffee.setImagePath(null);
         when(cache.findById(1L)).thenReturn(Mono.just(CachedItem.from(coffee)));
-        when(cart.findById(1L)).thenReturn(Mono.empty());
-        StepVerifier.create(service.getItem(1))
+        when(cart.findItem(TEST_USER_ID, 1L)).thenReturn(Mono.empty());
+        StepVerifier.create(service.getItem(TEST_USER_ID, 1))
                 .assertNext(dto -> {
                     assertThat(dto.count()).isZero();
                     assertThat(dto.imgPath()).isEqualTo("images/default-image.svg");
@@ -104,8 +105,8 @@ class ItemServiceImplTest {
     void detailsIncludeCartQuantity() {
         Item coffee = item(1, "Coffee", "12.50");
         when(cache.findById(1L)).thenReturn(Mono.just(CachedItem.from(coffee)));
-        when(cart.findById(1L)).thenReturn(Mono.just(new CartItem(coffee, 3)));
-        StepVerifier.create(service.getItem(1))
+        when(cart.findItem(TEST_USER_ID, 1L)).thenReturn(Mono.just(new CartItem(coffee, 3)));
+        StepVerifier.create(service.getItem(TEST_USER_ID, 1))
                 .assertNext(dto -> assertThat(dto.count()).isEqualTo(3))
                 .verifyComplete();
     }
@@ -114,7 +115,7 @@ class ItemServiceImplTest {
     void missingItemEmitsNotFound() {
         when(cache.findById(99L)).thenReturn(Mono.empty());
         when(items.findById(99L)).thenReturn(Mono.empty());
-        StepVerifier.create(service.getItem(99))
+        StepVerifier.create(service.getItem(TEST_USER_ID, 99))
                 .expectError(NotFoundException.class)
                 .verify();
         verifyNoInteractions(cart);
@@ -125,8 +126,8 @@ class ItemServiceImplTest {
         when(cache.findById(1L)).thenReturn(Mono.empty());
         when(items.findById(1L)).thenReturn(Mono.just(coffee));
         when(cache.save(CachedItem.from(coffee))).thenReturn(Mono.empty());
-        when(cart.findById(1L)).thenReturn(Mono.empty());
-        StepVerifier.create(service.getItem(1)).expectNextMatches(dto -> dto.title().equals("Coffee")).verifyComplete();
+        when(cart.findItem(TEST_USER_ID, 1L)).thenReturn(Mono.empty());
+        StepVerifier.create(service.getItem(TEST_USER_ID, 1)).expectNextMatches(dto -> dto.title().equals("Coffee")).verifyComplete();
         verify(cache).save(CachedItem.from(coffee));
     }
 
@@ -136,15 +137,15 @@ class ItemServiceImplTest {
         when(cache.findById(1L)).thenReturn(Mono.error(new IllegalStateException("Redis unavailable")));
         when(items.findById(1L)).thenReturn(Mono.just(coffee));
         when(cache.save(any())).thenReturn(Mono.error(new IllegalStateException("Redis unavailable")));
-        when(cart.findById(1L)).thenReturn(Mono.empty());
-        StepVerifier.create(service.getItem(1)).expectNextMatches(dto -> dto.title().equals("Coffee")).verifyComplete();
+        when(cart.findItem(TEST_USER_ID, 1L)).thenReturn(Mono.empty());
+        StepVerifier.create(service.getItem(TEST_USER_ID, 1)).expectNextMatches(dto -> dto.title().equals("Coffee")).verifyComplete();
     }
 
     @Test
     void databaseFailureIsNotSwallowedByCacheFallback() {
         when(cache.findById(1L)).thenReturn(Mono.empty());
         when(items.findById(1L)).thenReturn(Mono.error(new IllegalStateException("Database unavailable")));
-        StepVerifier.create(service.getItem(1)).expectErrorMessage("Database unavailable").verify();
+        StepVerifier.create(service.getItem(TEST_USER_ID, 1)).expectErrorMessage("Database unavailable").verify();
         verify(cache, never()).save(any());
     }
 
@@ -157,8 +158,8 @@ class ItemServiceImplTest {
                 PageRequest.of(1, 5, ItemSort.PRICE.getSort()))).thenReturn(Flux.just(coffee));
         when(items.countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("Coffee", "Coffee")).thenReturn(Mono.just(12L));
         when(cache.savePage("Coffee", ItemSort.PRICE, 2, 5, expected)).thenReturn(Mono.empty());
-        when(cart.findAllById(List.of(1L))).thenReturn(Flux.empty());
-        StepVerifier.create(service.getItems("  Coffee  ", ItemSort.PRICE, 2, 5)).assertNext(page -> {
+        when(cart.findAllByUserIdAndItemIds(TEST_USER_ID, List.of(1L))).thenReturn(Flux.empty());
+        StepVerifier.create(service.getItems(TEST_USER_ID, "  Coffee  ", ItemSort.PRICE, 2, 5)).assertNext(page -> {
             assertThat(page.items().getFirst().title()).isEqualTo("Coffee");
             assertThat(page.paging()).isEqualTo(new PagingDto(5, 2, true, true));
         }).verifyComplete();

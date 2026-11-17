@@ -1,6 +1,7 @@
 package ru.practicum.yakovlev.mymarketapp.controller;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.security.test.context.support.WithUserDetails;
 import reactor.core.publisher.Mono;
 import ru.practicum.yakovlev.mymarketapp.dto.OrderDto;
 import ru.practicum.yakovlev.mymarketapp.dto.OrdersPageDto;
@@ -10,14 +11,16 @@ import ru.practicum.yakovlev.mymarketapp.support.WebFluxTestSupport;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+@WithUserDetails(value = "demo", userDetailsServiceBeanName = "testCustomerDetailsService")
 class OrdersControllerTest extends WebFluxTestSupport {
     @Test
     void rendersHistory() {
-        when(orderService.getOrders()).thenReturn(Mono.just(new OrdersPageDto(List.of(new OrderDto(42, List.of(), new BigDecimal("25.00"))), new BigDecimal("25.00"))));
+        when(orderService.getOrders(TEST_USER_ID)).thenReturn(Mono.just(new OrdersPageDto(List.of(new OrderDto(42, List.of(), new BigDecimal("25.00"))), new BigDecimal("25.00"))));
         client.get()
                 .uri("/orders")
                 .exchange()
@@ -29,7 +32,7 @@ class OrdersControllerTest extends WebFluxTestSupport {
 
     @Test
     void rendersNewOrder() {
-        when(orderService.getOrder(42)).thenReturn(Mono.just(new OrderDto(42, List.of(), new BigDecimal("25.00"))));
+        when(orderService.getOrder(TEST_USER_ID, 42)).thenReturn(Mono.just(new OrderDto(42, List.of(), new BigDecimal("25.00"))));
         client.get()
                 .uri("/orders/42")
                 .exchange()
@@ -41,7 +44,7 @@ class OrdersControllerTest extends WebFluxTestSupport {
 
     @Test
     void missingOrderReturns404() {
-        when(orderService.getOrder(99)).thenReturn(Mono.error(new NotFoundException("missing")));
+        when(orderService.getOrder(TEST_USER_ID, 99)).thenReturn(Mono.error(new NotFoundException("missing")));
         client.get()
                 .uri("/orders/99")
                 .exchange()

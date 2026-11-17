@@ -8,7 +8,7 @@ spring:
     multipart:
       max-in-memory-size: 256KB
       max-disk-usage-per-part: 5MB
-      max-parts: 4
+      max-parts: 5
   data:
     redis:
       repositories:
@@ -17,6 +17,19 @@ spring:
       port: ${REDIS_PORT:6379}
       connect-timeout: 500ms
       timeout: 500ms
+  security:
+    oauth2:
+      client:
+        registration:
+          payments:
+            provider: keycloak
+            client-id: market-app
+            client-secret: ${MARKET_CLIENT_SECRET:market-local-secret}
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: client_credentials
+        provider:
+          keycloak:
+            token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8180/realms/market/protocol/openid-connect/token}
   r2dbc:
     url: ${R2DBC_URL}
     username: ${DB_USERNAME}
@@ -39,7 +52,7 @@ application:
     timeout: ${PRODUCT_CACHE_TIMEOUT:PT0.5S}
   payment:
     base-url: ${PAYMENT_BASE_URL:http://localhost:8081}
-    timeout: ${PAYMENT_TIMEOUT:PT3S}
+    timeout-ms: ${PAYMENT_TIMEOUT_MS:3000}
   images:
     root: ${IMAGES_ROOT:images}
     default-image: ${IMAGES_DEFAULT_IMAGE:default-image.svg}

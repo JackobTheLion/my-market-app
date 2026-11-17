@@ -1,5 +1,6 @@
 package ru.practicum.yakovlev.mymarketapp.integration;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.reactive.server.FluxExchangeResult;
@@ -11,18 +12,32 @@ import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.ItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.OrderRepository;
 import ru.practicum.yakovlev.mymarketapp.service.OrderService;
+import ru.practicum.yakovlev.mymarketapp.support.CustomerWebSession;
 import ru.practicum.yakovlev.mymarketapp.support.IntegrationTestSupport;
 
+import java.math.BigDecimal;
 import java.net.URI;
 import java.util.List;
 import java.util.regex.Pattern;
-
+import static org.mockito.ArgumentMatchers.longThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static ru.practicum.yakovlev.mymarketapp.support.CustomerWebSession.DEMO_PASSWORD;
+import static ru.practicum.yakovlev.mymarketapp.support.CustomerWebSession.DEMO_USERNAME;
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
 class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
     @Autowired
+    private WebTestClient guest;
     private WebTestClient client;
+
+    @BeforeEach
+    void loginDemoCustomer() {
+        client = CustomerWebSession.login(guest, DEMO_USERNAME, DEMO_PASSWORD);
+    }
+
     @Autowired
     private ItemRepository items;
     @Autowired
@@ -31,6 +46,30 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
     private OrderRepository orders;
     @Autowired
     private OrderService orderService;
+
+    @Test
+    void registeredCustomerHasSeparateCartAndCannotOpenDemoOrders() {
+        CustomerWebSession.register(guest, "anna", "anna-password");
+        WebTestClient anna = CustomerWebSession.login(guest, "anna", "anna-password");
+
+        long itemId = items.save(item("Coffee", "12.50")).block().getId();
+        client.post().uri("/items/{id}?action=PLUS", itemId).exchange().expectStatus().isSeeOther();
+        client.post().uri("/items/{id}?action=PLUS", itemId).exchange().expectStatus().isSeeOther();
+        anna.post().uri("/items/{id}?action=PLUS", itemId).exchange().expectStatus().isSeeOther();
+
+        String demoOrder = client.post().uri("/buy").exchange().expectStatus().isSeeOther()
+                .returnResult(Void.class).getResponseHeaders().getFirst("Location");
+        anna.get().uri(demoOrder).exchange().expectStatus().isNotFound();
+        assertThat(cart.countByUserId(TEST_USER_ID).block()).isZero();
+
+        String annaOrder = anna.post().uri("/buy").exchange().expectStatus().isSeeOther()
+                .returnResult(Void.class).getResponseHeaders().getFirst("Location");
+        client.get().uri(annaOrder).exchange().expectStatus().isNotFound();
+        anna.get().uri(annaOrder).exchange().expectStatus().isOk();
+        assertThat(orderService.getOrders(TEST_USER_ID).block().orders()).hasSize(1);
+        verify(paymentGateway).pay(TEST_USER_ID, new BigDecimal("25.00"));
+        verify(paymentGateway).pay(longThat(id -> id != TEST_USER_ID), eq(new BigDecimal("12.50")));
+    }
 
     @Test
     void catalogCartPurchaseAndHistoryWorkOverHttp() {
@@ -66,7 +105,7 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .isSeeOther()
                 .expectHeader()
                 .location("/items?search=coffee&sort=NO&pageNumber=1&pageSize=10");
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(1))
                 .verifyComplete();
         client.post()
@@ -74,7 +113,7 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .exchange()
                 .expectStatus()
                 .isSeeOther();
-        StepVerifier.create(cart.count())
+        StepVerifier.create(cart.countByUserId(TEST_USER_ID))
                 .expectNext(0L)
                 .verifyComplete();
         client.post()
@@ -96,7 +135,7 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .isOk()
                 .expectBody(String.class)
                 .value(html -> assertThat(html).contains("25.00"));
-        StepVerifier.create(cart.findById(id))
+        StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                 .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(2))
                 .verifyComplete();
         FluxExchangeResult<Void> response = client.post()
@@ -105,14 +144,14 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .expectStatus()
                 .is3xxRedirection()
                 .returnResult(Void.class);
-        OrderDto order = orderService.getOrders()
+        OrderDto order = orderService.getOrders(TEST_USER_ID)
                 .block()
                 .orders()
                 .getFirst();
         String location = "/orders/" + order.id() + "?newOrder=true";
         assertThat(response.getResponseHeaders().getFirst("Location")).isEqualTo(location);
         assertThat(order.totalSum()).isEqualByComparingTo("25.00");
-        StepVerifier.create(cart.count())
+        StepVerifier.create(cart.countByUserId(TEST_USER_ID))
                 .expectNext(0L)
                 .verifyComplete();
         client.get()
@@ -199,11 +238,11 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                             }
                         });
                 if (quantity == 0) {
-                    StepVerifier.create(cart.count())
+                    StepVerifier.create(cart.countByUserId(TEST_USER_ID))
                             .expectNext(0L)
                             .verifyComplete();
                 } else {
-                    StepVerifier.create(cart.findById(id))
+                    StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                             .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(quantity))
                             .verifyComplete();
                 }
@@ -259,7 +298,7 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                         .isOk()
                         .expectBody(String.class)
                         .value(html -> assertThat(html).contains("Coffee", "<span>" + quantity + "</span>"));
-                StepVerifier.create(cart.findById(id))
+                StepVerifier.create(cart.findItem(TEST_USER_ID, id))
                         .assertNext(entry -> assertThat(entry.getQuantity()).isEqualTo(quantity))
                         .verifyComplete();
             }
@@ -295,7 +334,7 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .exchange()
                 .expectStatus()
                 .isNotFound();
-        StepVerifier.create(cart.count())
+        StepVerifier.create(cart.countByUserId(TEST_USER_ID))
                 .expectNext(0L)
                 .verifyComplete();
     }
@@ -310,7 +349,7 @@ class MarketWebFluxIntegrationTest extends IntegrationTestSupport {
                 .exchange()
                 .expectStatus()
                 .isBadRequest();
-        StepVerifier.create(cart.count())
+        StepVerifier.create(cart.countByUserId(TEST_USER_ID))
                 .expectNext(0L)
                 .verifyComplete();
     }

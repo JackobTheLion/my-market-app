@@ -9,9 +9,11 @@ import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import reactor.core.publisher.Mono;
+import ru.practicum.yakovlev.mymarketapp.config.PostgresTestConfiguration;
 import ru.practicum.yakovlev.mymarketapp.payment.PaymentGateway;
 
 import java.math.BigDecimal;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 
@@ -28,7 +30,7 @@ public abstract class IntegrationTestSupport extends DatabaseTestSupport {
     @BeforeEach
     void resetExternalServices() {
         redis.execute(connection -> connection.serverCommands().flushDb()).then().block();
-        lenient().when(paymentGateway.getBalance()).thenReturn(Mono.just(new BigDecimal("100000.00")));
-        lenient().when(paymentGateway.pay(any())).thenReturn(Mono.empty());
+        lenient().when(paymentGateway.getBalance(anyLong())).thenReturn(Mono.just(new BigDecimal("100000.00")));
+        lenient().when(paymentGateway.pay(anyLong(), any())).thenReturn(Mono.empty());
     }
 }

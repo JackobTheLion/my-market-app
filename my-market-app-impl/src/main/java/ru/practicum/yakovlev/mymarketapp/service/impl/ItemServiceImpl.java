@@ -57,7 +57,7 @@ public class ItemServiceImpl implements ItemService {
     }
 
     @Override
-    public Mono<ItemPageDto> getItems(String search, ItemSort sort, int pageNumber, int pageSize) {
+    public Mono<ItemPageDto> getItems(Long userId, String search, ItemSort sort, int pageNumber, int pageSize) {
         String query = search == null ? "" : search.strip();
         return readCache(() -> cache.findPage(query, sort, pageNumber, pageSize))
                 .switchIfEmpty(Mono.defer(() -> loadPage(query, sort, pageNumber, pageSize)
@@ -65,20 +65,25 @@ public class ItemServiceImpl implements ItemService {
                                 .thenReturn(page))))
                 .flatMap(page -> {
                     List<Item> items = page.items().stream().map(CachedItem::toItem).toList();
-                    return getCartCounts(items)
+                    return getCartCounts(userId, items)
                             .map(counts -> toPageDto(items, page.total(), counts, pageNumber, pageSize));
                 });
     }
 
     @Override
-    public Mono<ItemDto> getItem(long id) {
+    public Mono<ItemDto> getItem(Long userId, long id) {
         return readCache(() -> cache.findById(id)).map(CachedItem::toItem)
                 .switchIfEmpty(Mono.defer(() -> itemRepository.findById(id)
                         .flatMap(item -> writeCache(() -> cache.save(CachedItem.from(item))).thenReturn(item))))
                 .switchIfEmpty(Mono.error(new NotFoundException("Item not found: " + id)))
-                .flatMap(item -> cartItemRepository.findById(id)
-                        .map(CartItem::getQuantity).defaultIfEmpty(0)
-                        .map(count -> itemMapper.toDto(item, count)));
+                .flatMap(item -> {
+                    if (userId == null) {
+                        return Mono.just(itemMapper.toDto(item, 0));
+                    }
+                    return cartItemRepository.findItem(userId, id)
+                            .map(CartItem::getQuantity).defaultIfEmpty(0)
+                            .map(count -> itemMapper.toDto(item, count));
+                });
     }
 
     @Override
@@ -136,11 +141,11 @@ public class ItemServiceImpl implements ItemService {
         });
     }
 
-    private Mono<Map<Long, Integer>> getCartCounts(List<Item> items) {
-        if (items.isEmpty()) {
+    private Mono<Map<Long, Integer>> getCartCounts(Long userId, List<Item> items) {
+        if (userId == null || items.isEmpty()) {
             return Mono.just(Map.of());
         }
-        return cartItemRepository.findAllById(items.stream().map(Item::getId).toList())
+        return cartItemRepository.findAllByUserIdAndItemIds(userId, items.stream().map(Item::getId).toList())
                 .collectMap(CartItem::getItemId, CartItem::getQuantity);
     }
 

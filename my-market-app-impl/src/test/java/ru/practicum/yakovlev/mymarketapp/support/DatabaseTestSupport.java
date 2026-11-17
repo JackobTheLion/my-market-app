@@ -17,6 +17,7 @@ public abstract class DatabaseTestSupport {
                 .then(sql("DELETE FROM orders"))
                 .then(sql("DELETE FROM cart_items"))
                 .then(sql("DELETE FROM items"))
+                .then(sql("DELETE FROM users WHERE id <> 1"))
                 .block();
     }
 

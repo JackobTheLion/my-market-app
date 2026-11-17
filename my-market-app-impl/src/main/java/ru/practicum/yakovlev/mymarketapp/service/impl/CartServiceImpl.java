@@ -15,8 +15,6 @@ import ru.practicum.yakovlev.mymarketapp.repository.ItemRepository;
 import ru.practicum.yakovlev.mymarketapp.service.CartService;
 import ru.practicum.yakovlev.mymarketapp.service.ItemService;
 
-import java.util.Comparator;
-
 @Service
 @RequiredArgsConstructor
 public class CartServiceImpl implements CartService {
@@ -26,9 +24,8 @@ public class CartServiceImpl implements CartService {
     private final ItemService itemService;
 
     @Override
-    public Mono<CartDto> getCart() {
-        return cartItemRepository.findAll()
-                .sort(Comparator.comparing(CartItem::getItemId))
+    public Mono<CartDto> getCart(long userId) {
+        return cartItemRepository.findAllByUserId(userId)
                 .collectList()
                 .flatMap(entries -> itemService.getItemsByIds(entries.stream().map(CartItem::getItemId).toList())
                         .map(products -> entries.stream()
@@ -39,30 +36,20 @@ public class CartServiceImpl implements CartService {
 
     @Override
     @Transactional
-    public Mono<Void> updateItem(long itemId, CartAction action) {
+    public Mono<Void> updateItem(long userId, long itemId, CartAction action) {
         return findItemOrThrow(itemId)
                 .flatMap(item -> switch (action) {
-                    case PLUS -> addItem(item);
-                    case MINUS -> reduceOrDeleteItem(itemId);
-                    case DELETE -> deleteItem(itemId);
+                    case PLUS -> cartItemRepository.increment(userId, item.getId()).then();
+                    case MINUS -> reduceOrDeleteItem(userId, itemId);
+                    case DELETE -> cartItemRepository.deleteItem(userId, itemId);
                 });
     }
 
-    private Mono<Void> addItem(Item item) {
-        return cartItemRepository.increment(item.getId())
-                .then();
-    }
-
-    private Mono<Void> reduceOrDeleteItem(long itemId) {
-        return cartItemRepository.findByIdForUpdate(itemId)
+    private Mono<Void> reduceOrDeleteItem(long userId, long itemId) {
+        return cartItemRepository.findItemForUpdate(userId, itemId)
                 .flatMap(entry -> entry.getQuantity() > 1
-                        ? cartItemRepository.decrement(itemId)
-                        : cartItemRepository.deleteLast(itemId))
-                .then();
-    }
-
-    private Mono<Void> deleteItem(long itemId) {
-        return cartItemRepository.deleteById(itemId);
+                        ? cartItemRepository.decrement(userId, itemId).then()
+                        : cartItemRepository.deleteLast(userId, itemId).then());
     }
 
     private Mono<Item> findItemOrThrow(Long itemId) {

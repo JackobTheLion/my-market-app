@@ -6,9 +6,9 @@ import ru.practicum.yakovlev.mymarketapp.dto.OrdersPageDto;
 
 public interface OrderService {
 
-    Mono<OrdersPageDto> getOrders();
+    Mono<OrdersPageDto> getOrders(long userId);
 
-    Mono<OrderDto> getOrder(long id);
+    Mono<OrderDto> getOrder(long userId, long id);
 
-    Mono<Long> createOrder();
+    Mono<Long> createOrder(long userId);
 }

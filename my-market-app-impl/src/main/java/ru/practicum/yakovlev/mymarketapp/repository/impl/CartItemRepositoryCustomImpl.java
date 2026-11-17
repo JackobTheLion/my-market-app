@@ -14,23 +14,25 @@ public class CartItemRepositoryCustomImpl implements CartItemRepositoryCustom {
     private final DatabaseClient databaseClient;
 
     @Override
-    public Flux<CartItem> findAllWithItems() {
-        return findAllWithItems(false);
+    public Flux<CartItem> findAllWithItems(long userId) {
+        return findAllWithItems(userId, false);
     }
 
     @Override
-    public Flux<CartItem> findAllWithItemsForUpdate() {
-        return findAllWithItems(true);
+    public Flux<CartItem> findAllWithItemsForUpdate(long userId) {
+        return findAllWithItems(userId, true);
     }
 
-    private Flux<CartItem> findAllWithItems(boolean forUpdate) {
+    private Flux<CartItem> findAllWithItems(long userId, boolean forUpdate) {
         return databaseClient.sql("""
                         SELECT cart.item_id, cart.quantity,
                                item.title, item.description, item.image_path, item.price
                         FROM cart_items cart
                         JOIN items item ON item.id = cart.item_id
+                        WHERE cart.user_id = :userId
                         ORDER BY cart.item_id
                         """ + (forUpdate ? " FOR UPDATE OF cart" : ""))
+                .bind("userId", userId)
                 .map((row, metadata) -> {
                     Item item = new Item(row.get("title", String.class), row.get("description", String.class),
                             row.get("image_path", String.class), row.get("price", BigDecimal.class));

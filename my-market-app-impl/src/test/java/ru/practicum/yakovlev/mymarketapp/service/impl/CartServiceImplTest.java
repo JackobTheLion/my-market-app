@@ -15,6 +15,7 @@ import ru.practicum.yakovlev.mymarketapp.repository.CartItemRepository;
 import ru.practicum.yakovlev.mymarketapp.repository.ItemRepository;
 
 import static org.mockito.Mockito.*;
+import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.TEST_USER_ID;
 import static ru.practicum.yakovlev.mymarketapp.support.TestFixtures.item;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,43 +33,41 @@ class CartServiceImplTest {
     void minusDeletesLastUnit() {
         Item coffee = item(1, "Coffee", "12.50");
         when(itemRepository.findById(1L)).thenReturn(Mono.just(coffee));
-        when(cartItemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(new CartItem(coffee, 1)));
-        when(cartItemRepository.deleteLast(1L)).thenReturn(Mono.just(1));
-        StepVerifier.create(service.updateItem(1, CartAction.MINUS))
+        when(cartItemRepository.findItemForUpdate(TEST_USER_ID, 1L)).thenReturn(Mono.just(new CartItem(coffee, 1)));
+        when(cartItemRepository.deleteLast(TEST_USER_ID, 1L)).thenReturn(Mono.just(1));
+        StepVerifier.create(service.updateItem(TEST_USER_ID, 1, CartAction.MINUS))
                 .verifyComplete();
-        verify(cartItemRepository).deleteLast(1L);
-        verify(cartItemRepository, never()).findById(anyLong());
-        verify(cartItemRepository, never()).save(any(CartItem.class));
+        verify(cartItemRepository).deleteLast(TEST_USER_ID, 1L);
+        verify(cartItemRepository, never()).findItem(anyLong(), anyLong());
     }
 
     @Test
     void minusDecrementsLargerQuantity() {
         Item coffee = item(1, "Coffee", "12.50");
         when(itemRepository.findById(1L)).thenReturn(Mono.just(coffee));
-        when(cartItemRepository.findByIdForUpdate(1L)).thenReturn(Mono.just(new CartItem(coffee, 2)));
-        when(cartItemRepository.decrement(1L)).thenReturn(Mono.just(1));
-        StepVerifier.create(service.updateItem(1, CartAction.MINUS))
+        when(cartItemRepository.findItemForUpdate(TEST_USER_ID, 1L)).thenReturn(Mono.just(new CartItem(coffee, 2)));
+        when(cartItemRepository.decrement(TEST_USER_ID, 1L)).thenReturn(Mono.just(1));
+        StepVerifier.create(service.updateItem(TEST_USER_ID, 1, CartAction.MINUS))
                 .verifyComplete();
-        verify(cartItemRepository).decrement(1L);
-        verify(cartItemRepository, never()).deleteLast(anyLong());
-        verify(cartItemRepository, never()).save(any(CartItem.class));
+        verify(cartItemRepository).decrement(TEST_USER_ID, 1L);
+        verify(cartItemRepository, never()).deleteLast(anyLong(), anyLong());
     }
 
     @Test
     void minusOnMissingPositionCompletes() {
         when(itemRepository.findById(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
-        when(cartItemRepository.findByIdForUpdate(1L)).thenReturn(Mono.empty());
-        StepVerifier.create(service.updateItem(1, CartAction.MINUS))
+        when(cartItemRepository.findItemForUpdate(TEST_USER_ID, 1L)).thenReturn(Mono.empty());
+        StepVerifier.create(service.updateItem(TEST_USER_ID, 1, CartAction.MINUS))
                 .verifyComplete();
-        verify(cartItemRepository, never()).decrement(anyLong());
-        verify(cartItemRepository, never()).deleteLast(anyLong());
+        verify(cartItemRepository, never()).decrement(anyLong(), anyLong());
+        verify(cartItemRepository, never()).deleteLast(anyLong(), anyLong());
     }
 
     @Test
     void deleteRemovesWholePosition() {
         when(itemRepository.findById(1L)).thenReturn(Mono.just(item(1, "Coffee", "12.50")));
-        when(cartItemRepository.deleteById(1L)).thenReturn(Mono.empty());
-        StepVerifier.create(service.updateItem(1, CartAction.DELETE))
+        when(cartItemRepository.deleteItem(TEST_USER_ID, 1L)).thenReturn(Mono.empty());
+        StepVerifier.create(service.updateItem(TEST_USER_ID, 1, CartAction.DELETE))
                 .verifyComplete();
     }
 
